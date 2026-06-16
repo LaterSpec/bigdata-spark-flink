@@ -1,0 +1,6 @@
+scikit-learn==1.7.1
+joblib==1.5.2
+pandas==2.3.2
+polars==1.38.1
+numpy==2.3.3
+scipy==1.16.2

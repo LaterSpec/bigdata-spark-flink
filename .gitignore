@@ -1,0 +1,60 @@
+# Secrets and local credentials
+*.pem
+*.key
+*.crt
+*.env
+.env
+.env.*
+aws_credentials*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+local_baseline/.venv/
+
+# Local raw data and generated lake files
+youtube_lake.csv
+rawdataset/
+dummy_data/
+
+# Generated archives and temporary upload bundles
+*.tar.gz
+*.zip
+local_baseline_s3_upload.tar.gz
+
+# Generated local baseline artifacts/outputs
+local_baseline/artifacts/
+local_baseline/outputs/
+local_baseline/data_cache/
+local_baseline/__pycache__/
+
+# Generated Spark / local caches
+codes/spark/__pycache__/
+
+# Prepared/generated datasets
+dataset/prepared/
+dataset/*.parquet
+dataset/*.csv
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Logs
+*.log
+logs/
