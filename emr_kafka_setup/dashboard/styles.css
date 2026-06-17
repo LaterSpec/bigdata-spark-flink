@@ -1,0 +1,733 @@
+:root {
+  --ink: #071310;
+  --ink-soft: #10241f;
+  --panel: rgba(12, 35, 30, 0.82);
+  --panel-strong: rgba(17, 49, 41, 0.96);
+  --leaf: #31d18b;
+  --leaf-dim: #1f7e5d;
+  --cancha: #f0c86b;
+  --rocoto: #ff5a3d;
+  --sky-s3: #69b9ff;
+  --text: #f5f2df;
+  --muted: #a8bdb0;
+  --line: rgba(240, 200, 107, 0.18);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+  --radius-xl: 28px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text);
+  font-family: "Aptos", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(49, 209, 139, 0.18), transparent 28rem),
+    radial-gradient(circle at 90% 4%, rgba(240, 200, 107, 0.16), transparent 24rem),
+    linear-gradient(135deg, #06100d 0%, #0b1915 52%, #08110f 100%);
+  overflow-x: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+code {
+  color: var(--cancha);
+  font-family: "Cascadia Code", "Consolas", monospace;
+}
+
+.signal-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  background-image:
+    linear-gradient(rgba(240, 200, 107, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 200, 107, 0.08) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 88%);
+}
+
+.dashboard-shell {
+  position: relative;
+  z-index: 1;
+  width: min(1500px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 20px 0 40px;
+}
+
+/* ── HERO ── */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.9fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.hero-copy,
+.panel,
+.pipeline-node,
+.metric-card {
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(12, 35, 30, 0.86), rgba(6, 19, 16, 0.7));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.hero-copy {
+  position: relative;
+  min-height: 300px;
+  padding: clamp(24px, 4vw, 46px);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.hero-copy::after {
+  content: "";
+  position: absolute;
+  right: -12%;
+  bottom: -28%;
+  width: 520px;
+  height: 520px;
+  border: 1px solid rgba(49, 209, 139, 0.18);
+  border-radius: 48% 52% 44% 56%;
+  background: conic-gradient(from 130deg, transparent, rgba(49, 209, 139, 0.16), rgba(255, 90, 61, 0.12), transparent);
+  animation: drift 18s linear infinite;
+}
+
+/* Compact Kafka status bar inside hero-copy */
+.kafka-status-bar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding: 9px 14px;
+  border: 1px solid rgba(49, 209, 139, 0.22);
+  border-radius: 999px;
+  background: rgba(49, 209, 139, 0.06);
+  width: fit-content;
+}
+
+.kafka-label {
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.82rem;
+  color: var(--leaf);
+}
+
+.kafka-counts {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.kafka-counts span {
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.kafka-counts strong {
+  color: var(--leaf);
+  font-weight: 700;
+  transition: color 300ms;
+}
+
+/* Hero stream panel (Cinta viva at top-right) */
+.hero-stream {
+  display: flex;
+  flex-direction: column;
+  min-height: 500px;
+  max-height: 620px;
+  border-radius: var(--radius-xl);
+  padding: 22px;
+  overflow: hidden;
+}
+
+.hero-stream .panel-heading {
+  margin-bottom: 14px;
+  flex: 0 0 auto;
+}
+
+.hero-stream .stream-list {
+  flex: 1 1 0;
+  overflow-y: auto;
+  max-height: none;
+  padding-right: 4px;
+}
+
+/* ── EYEBROW, KICKER, LABEL ── */
+.eyebrow,
+.panel-kicker,
+.metric-label {
+  margin: 0;
+  color: var(--cancha);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-family: "Bahnschrift", "Aptos Display", "Segoe UI", sans-serif;
+  letter-spacing: -0.055em;
+}
+
+h1 {
+  position: relative;
+  z-index: 1;
+  max-width: 900px;
+  margin-top: 18px;
+  font-size: clamp(2.6rem, 6vw, 5.6rem);
+  line-height: 0.88;
+}
+
+h2 {
+  font-size: clamp(1.1rem, 1.8vw, 1.6rem);
+  line-height: 0.96;
+}
+
+.hero-lede {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: clamp(0.92rem, 1.6vw, 1.1rem);
+  line-height: 1.6;
+}
+
+.hero-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.sync-status {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.74rem;
+}
+
+.sync-status.ok {
+  color: var(--leaf);
+}
+
+.sync-status.error {
+  color: var(--rocoto);
+}
+
+/* ── BUTTONS ── */
+.primary-action,
+.secondary-action,
+.filter-button {
+  border: 1px solid rgba(240, 200, 107, 0.24);
+  border-radius: 999px;
+  padding: 10px 16px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.primary-action {
+  color: #05110e;
+  background: linear-gradient(135deg, var(--leaf), var(--cancha));
+  font-weight: 800;
+}
+
+.secondary-action:hover,
+.filter-button:hover,
+.primary-action:hover {
+  transform: translateY(-2px);
+  border-color: rgba(240, 200, 107, 0.54);
+}
+
+/* ── PULSE DOT ── */
+.pulse-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--leaf);
+  box-shadow: 0 0 0 0 rgba(49, 209, 139, 0.72);
+  animation: pulse 1.6s infinite;
+}
+
+/* ── PIPELINE MAP ── */
+.pipeline-map {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.pipeline-node {
+  position: relative;
+  min-height: 88px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.pipeline-node::after {
+  content: "";
+  position: absolute;
+  inset: auto 18px 14px;
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--leaf), var(--cancha), var(--rocoto));
+}
+
+.pipeline-node span {
+  display: block;
+  color: var(--muted);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.78rem;
+}
+
+.pipeline-node strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 1.02rem;
+}
+
+/* ── METRIC BOARD ── */
+.metric-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.metric-card {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+}
+
+.metric-card strong {
+  display: block;
+  margin-top: 8px;
+  font-family: "Bahnschrift", sans-serif;
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  line-height: 0.92;
+  transition: color 300ms;
+}
+
+.metric-card small {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.metric-card.hot strong {
+  color: var(--rocoto);
+}
+
+/* Pulse animation for metric cards when updating */
+@keyframes countPulse {
+  0% { opacity: 1; }
+  40% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.metric-card strong.updating {
+  animation: countPulse 400ms ease;
+}
+
+/* ── CONTROL STRIP ── */
+.control-strip {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 16px;
+  align-items: end;
+  margin: 18px 0;
+}
+
+.search-box {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.search-box input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 13px 18px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+  transition: border-color 200ms, box-shadow 200ms;
+}
+
+.search-box input:focus {
+  border-color: var(--leaf);
+  box-shadow: 0 0 0 4px rgba(49, 209, 139, 0.12);
+}
+
+.search-box input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-button.active {
+  color: #06110e;
+  background: var(--cancha);
+  font-weight: 800;
+}
+
+/* ── WORKSPACE GRID (3-column analytics) ── */
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.6fr) minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* ── PANELS ── */
+.panel {
+  border-radius: var(--radius-xl);
+  padding: 20px;
+}
+
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.live-badge {
+  flex: 0 0 auto;
+  border: 1px solid rgba(49, 209, 139, 0.22);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--leaf);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.7rem;
+}
+
+/* ── STREAM LIST ── */
+.stream-list {
+  display: grid;
+  gap: 10px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(49, 209, 139, 0.2) transparent;
+}
+
+.stream-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.stream-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.stream-list::-webkit-scrollbar-thumb {
+  background: rgba(49, 209, 139, 0.2);
+  border-radius: 99px;
+}
+
+.stream-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  animation: riseIn 400ms ease both;
+}
+
+.stream-item::before {
+  content: "";
+  width: 8px;
+  height: 100%;
+  min-height: 44px;
+  border-radius: 99px;
+  background: var(--leaf);
+  align-self: stretch;
+}
+
+.stream-item.alert::before {
+  background: var(--rocoto);
+}
+
+.stream-item.spark::before {
+  background: var(--sky-s3);
+}
+
+.stream-copy strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}
+
+.stream-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+  font-size: 0.88rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.stream-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.tag {
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--text);
+  background: rgba(240, 200, 107, 0.1);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.66rem;
+}
+
+.offset-pill {
+  color: var(--muted);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.68rem;
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+/* ── ACTOR BARS ── */
+.actor-bars {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.actor-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 46px;
+  gap: 10px;
+  align-items: center;
+}
+
+.bar-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--leaf), var(--cancha), var(--rocoto));
+  transform-origin: left;
+  animation: growBar 700ms ease both;
+  transition: width 600ms ease;
+}
+
+#timeline-chart {
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ── ALERT + SPARK ── */
+.alert-stack,
+.spark-grid {
+  display: grid;
+  gap: 10px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 90, 61, 0.2) transparent;
+}
+
+.spark-grid {
+  scrollbar-color: rgba(105, 185, 255, 0.2) transparent;
+}
+
+.alert-card,
+.spark-card {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.alert-card {
+  border-color: rgba(255, 90, 61, 0.22);
+}
+
+.alert-card strong,
+.spark-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.92rem;
+}
+
+.alert-card p,
+.spark-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  font-size: 0.86rem;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes pulse {
+  70% {
+    box-shadow: 0 0 0 12px rgba(49, 209, 139, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(49, 209, 139, 0);
+  }
+}
+
+@keyframes drift {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes growBar {
+  from {
+    transform: scaleX(0.08);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ── RESPONSIVE ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  .workspace-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .chart-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1040px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-stream {
+    min-height: 380px;
+    max-height: 440px;
+  }
+
+  .workspace-grid,
+  .pipeline-map,
+  .metric-board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .chart-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 680px) {
+  .dashboard-shell {
+    width: min(100% - 20px, 1440px);
+    padding-top: 10px;
+  }
+
+  .hero-copy,
+  .panel {
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .pipeline-map,
+  .metric-board,
+  .workspace-grid,
+  .control-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-panel {
+    grid-column: auto;
+  }
+
+  .stream-item {
+    grid-template-columns: 8px 1fr;
+  }
+
+  .offset-pill {
+    display: none;
+  }
+
+  .actor-row {
+    grid-template-columns: 1fr;
+  }
+
+  .kafka-counts {
+    display: none;
+  }
+}

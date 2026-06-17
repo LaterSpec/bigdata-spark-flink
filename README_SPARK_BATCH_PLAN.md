@@ -1,6 +1,8 @@
 # Plan Spark Batch - Baseline Local a EMR
 
-Este documento define el siguiente paso del proyecto: llevar el baseline local NLP + reglas peruanas a un flujo Spark Batch en EMR. No implementa ni ejecuta Kafka/Flink todavia.
+Este documento define el plan que llevo el baseline local NLP + reglas peruanas a un flujo Spark Batch en EMR. Se conserva como record historico de una fase ya completada. No implementa ni ejecuta Kafka/Flink.
+
+Para la nueva arquitectura objetivo y la siguiente expansion en AWS, ver `architecture.md`.
 
 ## Objetivo del job Spark Batch
 

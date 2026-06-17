@@ -18,6 +18,7 @@ Proyecto: **Deteccion y analisis del discurso discriminatorio y polarizacion pol
 - [x] Spark ML inference sobre YouTube full.
 - [x] Hybrid scoring con `hybrid_risk_level` y `hybrid_risk_reason`.
 - [x] 5 jobs Spark Batch documentados en `docs/SPARK_BATCH_RECORDS.md`.
+- [x] Nueva arquitectura objetivo documentada en `architecture.md`.
 
 El proyecto debe cumplir lo pedido en la propuesta:
 
@@ -716,14 +717,21 @@ Secciones alineadas al documento:
 - [ ] Crear README inicial.
 - [ ] Crear diagrama Mermaid.
 
-### Semana / fase 2 - Kafka
+### Semana / fase 2 - Diseno Kafka en AWS
 
-- [ ] Levantar Kafka.
+- [ ] Definir si Kafka ira en Amazon MSK Serverless o Provisioned.
+- [ ] Definir VPC, subnets y security groups.
+- [ ] Definir topics, particiones y retencion.
+- [ ] Definir contrato JSON de eventos.
+
+### Semana / fase 3 - Kafka
+
+- [ ] Levantar Kafka en AWS.
 - [ ] Crear topics.
 - [ ] Crear producer Python.
 - [ ] Validar mensajes JSON.
 
-### Semana / fase 3 - Spark batch
+### Semana / fase 4 - Spark batch
 
 - [ ] Consolidar raw.
 - [ ] Limpiar batch.
@@ -731,7 +739,7 @@ Secciones alineadas al documento:
 - [ ] Integrar dataset externo.
 - [ ] Entrenar modelo base.
 
-### Semana / fase 4 - Flink streaming
+### Semana / fase 5 - Flink streaming
 
 - [ ] Crear job de limpieza.
 - [ ] Crear job de throughput.
@@ -739,7 +747,7 @@ Secciones alineadas al documento:
 - [ ] Crear job de polarizacion.
 - [ ] Crear job de alertas.
 
-### Semana / fase 5 - Dashboard y metricas
+### Semana / fase 6 - Dashboard y metricas
 
 - [ ] Crear dashboard.
 - [ ] Mostrar resultados batch.
@@ -747,7 +755,7 @@ Secciones alineadas al documento:
 - [ ] Mostrar throughput.
 - [ ] Mostrar latencia.
 
-### Semana / fase 6 - Informe y demo
+### Semana / fase 7 - Informe y demo
 
 - [ ] Documentar arquitectura.
 - [ ] Documentar los 10 jobs.

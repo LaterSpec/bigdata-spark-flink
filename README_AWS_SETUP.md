@@ -2,6 +2,8 @@
 
 Este archivo documenta la preparacion de S3 y EMR para la fase Spark Batch del proyecto de deteccion de discurso ofensivo, discriminatorio, terruqueo y polarizacion politica en comentarios de YouTube Live Chat electoral peruano.
 
+La fase documentada aqui ya queda como base operativa actual. La nueva arquitectura objetivo del proyecto agrega una capa streaming en AWS con Kafka y Flink, pero esa expansion todavia no se implementa en este documento.
+
 ## Contexto local
 
 - Workspace local: `C:\Users\itsma\Documents\BigData\Proyectofinal`
@@ -245,4 +247,11 @@ Apagar o terminar el cluster EMR cuando no se este usando. Mantener 1 master + 2
 
 ## Siguiente paso
 
-El siguiente paso es convertir el baseline local a un job Spark Batch que lea `s3://figuretibucket/data/raw/youtube/youtube_lake.csv`, aplique el modelo/reglas o una version distribuida equivalente, y escriba resultados en `s3://figuretibucket/output/batch/`.
+El siguiente paso ya no es Spark Batch, porque esa fase quedo completada. A partir de esta base, la continuacion recomendada en AWS es:
+
+1. Definir la topologia de Kafka en AWS.
+2. Elegir el servicio de Kafka administrado o autogestionado.
+3. Definir topics, particiones, retencion y seguridad.
+4. Diseñar la integracion futura entre producer, Kafka, Flink, S3 y dashboard.
+
+Referencia principal para esa nueva etapa: `architecture.md`.

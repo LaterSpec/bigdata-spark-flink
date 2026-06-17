@@ -328,10 +328,13 @@ La fase Spark Batch queda completada. Se implemento procesamiento historico real
 
 Queda pendiente:
 
+- Diseno e implementacion de Kafka en AWS.
 - Kafka.
 - Flink streaming.
 - Dashboard.
 - Informe final.
+
+La referencia arquitectonica para la siguiente etapa ya no es este documento, sino `architecture.md`, donde se define la evolucion a una arquitectura hibrida S3 + EMR + Kafka + Flink en AWS.
 
 ## 15. Checklist final
 

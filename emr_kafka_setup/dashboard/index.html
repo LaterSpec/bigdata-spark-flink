@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Radar Electoral Streaming | Big Data Peru</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="signal-grid" aria-hidden="true"></div>
+    <main class="dashboard-shell">
+
+      <header class="hero">
+        <section class="hero-copy" aria-labelledby="dashboard-title">
+          <p class="eyebrow">S3 Raw -> Kafka -> Spark Batch / Flink Streaming</p>
+          <h1 id="dashboard-title">Radar electoral de comentarios en vivo</h1>
+          <p class="hero-lede">
+            Monitoreo local para el proyecto Big Data: comentarios de YouTube Live Chat pasan por Kafka,
+            se ordenan con Flink en baja latencia y se consolidan con Spark Batch en S3 Curated.
+          </p>
+          <div class="hero-actions">
+            <button class="primary-action" id="play-stream" type="button">Pausar cinta</button>
+            <button class="secondary-action" id="refresh-demo" type="button">Reiniciar cinta</button>
+            <button class="secondary-action sync-action" id="sync-aws" type="button">Sincronizar AWS</button>
+          </div>
+          <p class="sync-status" id="sync-status">Leyendo snapshot local conectado a los artefactos del proyecto.</p>
+
+          <div class="kafka-status-bar" aria-label="Estado del pipeline Kafka">
+            <span class="pulse-dot"></span>
+            <span class="kafka-label">Kafka activo</span>
+            <div class="kafka-counts">
+              <span>raw_youtube_chat <strong id="raw-count">105</strong></span>
+              <span>nlp_stream_results <strong id="nlp-count">213</strong></span>
+              <span>alerts_polarization <strong id="alert-count">3</strong></span>
+            </div>
+          </div>
+        </section>
+
+        <article class="panel hero-stream" aria-label="Cinta viva">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Cinta viva</p>
+              <h2>Mensajes y senales en fila</h2>
+            </div>
+            <span class="live-badge" id="data-mode">snapshot local</span>
+          </div>
+          <div class="stream-list" id="stream-list" aria-live="polite"></div>
+        </article>
+      </header>
+
+      <section class="pipeline-map" aria-label="Mapa de arquitectura">
+        <article class="pipeline-node raw">
+          <span>S3 Raw</span>
+          <strong>youtube_lake.csv</strong>
+        </article>
+        <article class="pipeline-node producer">
+          <span>Producer</span>
+          <strong>simula streaming</strong>
+        </article>
+        <article class="pipeline-node kafka">
+          <span>Kafka</span>
+          <strong>raw_youtube_chat</strong>
+        </article>
+        <article class="pipeline-node flink">
+          <span>Flink</span>
+          <strong>senales + alertas</strong>
+        </article>
+        <article class="pipeline-node spark">
+          <span>Spark</span>
+          <strong>curated batch</strong>
+        </article>
+      </section>
+
+      <section class="metric-board" aria-label="Metricas principales">
+        <article class="metric-card">
+          <span class="metric-label">Muestra validada</span>
+          <strong id="validated-count">105</strong>
+          <small>mensajes desde Kafka</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Eventos Flink</span>
+          <strong id="flink-events">213</strong>
+          <small>normalizacion, ventanas y reglas</small>
+        </article>
+        <article class="metric-card hot">
+          <span class="metric-label">Alertas</span>
+          <strong id="risk-alerts">3</strong>
+          <small>topic alerts_polarization</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Spark Batch</span>
+          <strong id="spark-output">105</strong>
+          <small>rows curated from Kafka</small>
+        </article>
+      </section>
+
+      <section class="control-strip" aria-label="Filtros del dashboard">
+        <label class="search-box">
+          <span>Buscar mensaje, actor o tag</span>
+          <input id="search-input" type="search" placeholder="Ej. ONPE, terruqueo, Keiko..." autocomplete="off" />
+        </label>
+        <div class="filter-buttons" role="group" aria-label="Filtro por fuente">
+          <button class="filter-button active" data-filter="all" type="button">Todo</button>
+          <button class="filter-button" data-filter="stream" type="button">Streaming</button>
+          <button class="filter-button" data-filter="alert" type="button">Alertas</button>
+          <button class="filter-button" data-filter="spark" type="button">Spark</button>
+        </div>
+      </section>
+
+      <section class="workspace-grid">
+        <article class="panel chart-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Flink windows</p>
+              <h2>Polarizacion por actor</h2>
+            </div>
+          </div>
+          <div class="actor-bars" id="actor-bars"></div>
+          <canvas id="timeline-chart" width="760" height="200" aria-label="Grafico de volumen por minuto"></canvas>
+        </article>
+
+        <article class="panel alert-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">alerts_polarization</p>
+              <h2>Alertas de riesgo</h2>
+            </div>
+          </div>
+          <div class="alert-stack" id="alert-stack"></div>
+        </article>
+
+        <article class="panel spark-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Spark Batch</p>
+              <h2>Dataset curado desde Kafka</h2>
+            </div>
+          </div>
+          <div class="spark-grid" id="spark-grid"></div>
+        </article>
+      </section>
+
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

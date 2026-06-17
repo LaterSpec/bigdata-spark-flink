@@ -2,6 +2,8 @@
 
 Este documento es acumulativo. Se ira ampliando conforme avancemos con Spark ML, Kafka, Flink, dashboard y nuevas validaciones.
 
+Nota de roadmap: la fase actual documentada aqui cubre principalmente Spark Batch. La siguiente fase tecnica prevista es Kafka en AWS, segun la arquitectura objetivo definida en `architecture.md`, pero todavia no hay pruebas de Kafka/Flink registradas porque esa implementacion aun no empieza.
+
 ## 1. Setup AWS/S3/EMR
 
 ### Infraestructura validada
