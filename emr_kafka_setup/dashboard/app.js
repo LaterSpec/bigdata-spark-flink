@@ -1,211 +1,82 @@
-const fallbackSnapshot = {
-  generated_at: "2026-06-17T02:09:35Z",
-  environment: {
-    emr_master: "ip-172-31-11-3",
-    kafka: "3.6.2",
-    flink: "1.17.1-amzn-1",
-    spark: "3.4.1-amzn-2",
-    bootstrap: "ip-172-31-11-3.ec2.internal:9092"
-  },
-  counts: {
-    raw_youtube_chat: 105,
-    nlp_stream_results: 213,
-    alerts_polarization: 3,
-    spark_curated_rows: 105,
-    spark_aggregates_rows: 54
-  },
-  offsets: {
-    raw_youtube_chat: [
-      { partition: 0, offset: 34 },
-      { partition: 1, offset: 31 },
-      { partition: 2, offset: 40 }
-    ],
-    nlp_stream_results: [
-      { partition: 0, offset: 94 },
-      { partition: 1, offset: 39 },
-      { partition: 2, offset: 80 }
-    ],
-    alerts_polarization: [
-      { partition: 0, offset: 0 },
-      { partition: 1, offset: 0 },
-      { partition: 2, offset: 3 }
-    ]
-  },
-  stream_events: [
-    {
-      source: "stream",
-      job_name: "flink_job1_normalize_stream",
-      event_type: "normalized_comment",
-      source_partition: 2,
-      source_offset: 0,
-      payload: {
-        event_id: "3fc23294c70ae409e6bd2280993ab85a",
-        stream_text: "como keiko esta ganando si en el extranjeto los peruanos halla dicen que no han podido votar en argentina y espana y otros paises",
-        message_length: 129,
-        is_empty_message: false
-      }
+function emptyStreamingSnapshot() {
+  return {
+    generated_at: "",
+    data_mode: "disconnected",
+    environment: {},
+    counts: {
+      raw_youtube_chat: 0,
+      nlp_stream_results: 0,
+      alerts_polarization: 0,
+      filtered_messages: 0,
+      spark_curated_rows: 0,
+      spark_aggregates_rows: 0
     },
-    {
-      source: "stream",
-      job_name: "flink_job1_normalize_stream",
-      event_type: "normalized_comment",
-      source_partition: 2,
-      source_offset: 2,
-      payload: {
-        event_id: "cb5b643f5d47974a4ccd27e46a2c84fd",
-        stream_text: "mejor cuenten todos los votos como acto se transparencia, porque la onpe desde la primera vuelta ya es dudosa",
-        message_length: 109,
-        is_empty_message: false
-      }
-    },
-    {
-      source: "stream",
-      job_name: "flink_job3_political_signals",
-      event_type: "political_signals",
-      source_partition: 1,
-      source_offset: 8,
-      payload: {
-        event_id: "signal-001",
-        stream_text: "onpe y jne deben explicar el conteo de votos y las actas observadas",
-        local_rule_tags: "electoral_institution|fraude|political_mention",
-        local_risk_score_stream: 3
-      }
-    },
-    {
-      source: "stream",
-      job_name: "flink_job4_actor_polarization",
-      event_type: "actor_polarization_window",
-      source_partition: 0,
-      source_offset: 18,
-      payload: {
-        actor: "keiko_fujimori_fp",
-        mention_count: 7,
-        insult_count: 2,
-        fraud_count: 1,
-        terruqueo_count: 1,
-        polarization_score: 4.2
-      }
-    },
-    {
-      source: "spark",
-      job_name: "spark_hybrid_scoring_from_kafka",
-      event_type: "hybrid_batch_result",
-      source_partition: 2,
-      source_offset: 12,
-      payload: {
-        stream_text: "comentario evaluado por reglas locales y modelo OffendES",
-        hybrid_risk_level: "medium",
-        hybrid_risk_reason: "reglas locales fuertes + ofensividad general",
-        confidence_binary_bucket: "medium"
-      }
-    }
-  ],
-  alerts: [
-    {
-      source: "alert",
-      job_name: "flink_job5_risk_alerts",
-      event_type: "risk_alert",
-      source_partition: 2,
-      source_offset: 12,
-      payload: {
-        alert_id: "1c353d93-b278-4d1d-97b6-315895cfda2e",
-        alert_type: "terruqueo_plus_insult",
-        severity: "medium",
-        reason: "terruqueo|electoral_institution|political_mention|general_insult",
-        actor: "keiko_fujimori_fp",
-        message_text: "ROBERTO COMUNISTA SANCHEZ NO A GANADO EN EL PERU, SOLO TIENE VOTOS DE ANTIFUJIMORISMO...",
-        local_risk_score_stream: 4
-      }
-    },
-    {
-      source: "alert",
-      job_name: "flink_job5_risk_alerts",
-      event_type: "risk_alert",
-      source_partition: 1,
-      source_offset: 10,
-      payload: {
-        alert_id: "2e0d3aad-b98c-4193-b471-a73a0d2c41e9",
-        alert_type: "terruqueo_plus_insult",
-        severity: "medium",
-        reason: "terruqueo|electoral_institution|political_mention|general_insult",
-        actor: "keiko_fujimori_fp",
-        message_text: "ROBERTO COMUNISTA SANCHEZ NO A GANADO EN EL PERU...",
-        local_risk_score_stream: 4
-      }
-    },
-    {
-      source: "alert",
-      job_name: "flink_job5_risk_alerts",
-      event_type: "risk_alert",
-      source_partition: 1,
-      source_offset: 11,
-      payload: {
-        alert_id: "90f6ac06-a926-45aa-b115-def695e64081",
-        alert_type: "terruqueo_plus_insult",
-        severity: "medium",
-        reason: "terruqueo|electoral_institution|political_mention|general_insult",
-        actor: "keiko_fujimori_fp",
-        message_text: "ROBERTO COMUNISTA SANCHEZ NO A GANADO EN EL PERU...",
-        local_risk_score_stream: 4
-      }
-    }
-  ],
-  spark_jobs: [
-    {
-      name: "Job 1 Kafka Raw Ingest",
-      rows: 105,
-      output: "s3://figuretibucket/output/kafka_to_spark/raw_youtube_chat_test/",
-      status: "SUCCESS"
-    },
-    {
-      name: "Job 2 Reglas locales",
-      rows: 105,
-      output: "s3://figuretibucket/output/batch/from_kafka/job2_rules/run_rules_kafka_test/",
-      status: "SUCCESS"
-    },
-    {
-      name: "Job 4 OffendES inference",
-      rows: 105,
-      output: "s3://figuretibucket/output/batch/from_kafka/job4_ml_inference/run_sparkml_offendes_kafka_test/",
-      status: "SUCCESS"
-    },
-    {
-      name: "Job 5 Hibrido + agregados",
-      rows: 105,
-      output: "s3://figuretibucket/output/batch/from_kafka/job5_hybrid/run_hybrid_kafka_test/",
-      status: "SUCCESS"
-    }
-  ],
-  actors: [
-    { name: "Keiko / Fujimori / FP", score: 84, mentions: 12 },
-    { name: "ONPE / JNE", score: 64, mentions: 9 },
-    { name: "Castillo / Peru Libre", score: 48, mentions: 7 },
-    { name: "JP / Juntos por el Peru", score: 28, mentions: 4 },
-    { name: "RLA / Porky", score: 18, mentions: 2 }
-  ],
-  timeline: [
-    { label: "00:00", comments: 8, alerts: 0 },
-    { label: "00:01", comments: 15, alerts: 1 },
-    { label: "00:02", comments: 23, alerts: 1 },
-    { label: "00:03", comments: 19, alerts: 0 },
-    { label: "00:04", comments: 31, alerts: 1 },
-    { label: "00:05", comments: 9, alerts: 0 }
-  ]
-};
+    offsets: {},
+    stream_events: [],
+    alerts: [],
+    spark_jobs: [],
+    actors: [],
+    timeline: []
+  };
+}
 
 // ── STATE ─────────────────────────────────────────────────────────────────
 let state = {
-  snapshot: fallbackSnapshot,
+  snapshot: emptyStreamingSnapshot(),
   filter: "all",
   query: "",
   playing: true,
+  awsConnected: false,
+  pollingHandle: null,
+  statusPollingHandle: null,
+  sparkPollingHandle: null,
   pointer: 0,
-  // Ring buffer: all emitted events regardless of active filter.
-  // Filters are applied at render time, never on emit.
+  // Ring buffer: emitted events in chat order. Filters are applied at render time.
   masterQueue: [],
+  rawQueue: [],
+  filteredQueue: [],
   MAX_QUEUE: 400,
-  chartTick: 0
+  chartTick: 0,
+  liveRefreshInFlight: false,
+  lastLiveGeneratedAt: "",
+  liveCursor: null,
+  emitSeq: 0,
+  renderedStreamSeq: 0,
+  renderedRawSeq: 0,
+  renderedFilteredSeq: 0,
+  renderedAlertSeq: 0,
+  actorCounts: {},
+  actorTimeline: [],
+  sessionCounts: {
+    raw_youtube_chat: 0,
+    nlp_stream_results: 0,
+    alerts_polarization: 0,
+    filtered_messages: 0,
+    spark_curated_rows: 0,
+    spark_aggregates_rows: 0
+  },
+  dataSize: 0,
+  sparkBatchSize: 1000,
+  awsStatus: null,
+  sparkBatch: {
+    batches: {},
+    latest_batch_id: ""
+  },
+  sparkStartInFlight: false,
+  sparkStartingTargets: new Set(),
+  chartHover: null,
+  chartAnimation: null,
+  chartHeadProgress: 1
 };
+
+const ACTOR_SERIES = [
+  { key: "keiko_fujimori_fp", label: "Keiko / Fujimori / FP", color: "#ff8b52" },
+  { key: "onpe_jne", label: "ONPE / JNE", color: "#31d18b" },
+  { key: "castillo_peru_libre", label: "Castillo / Peru Libre", color: "#69b9ff" },
+  { key: "jp_juntos_por_el_peru", label: "JP / Juntos por el Peru", color: "#f0c86b" },
+  { key: "lopez_aliaga_porky", label: "RLA / Porky", color: "#ff5a3d" },
+  { key: "antauro_humala", label: "Antauro", color: "#c792ea" }
+];
 
 // ── SELECTORS ─────────────────────────────────────────────────────────────
 const selectors = {
@@ -217,9 +88,16 @@ const selectors = {
   riskAlerts: document.querySelector("#risk-alerts"),
   sparkOutput: document.querySelector("#spark-output"),
   streamList: document.querySelector("#stream-list"),
+  rawChatList: document.querySelector("#raw-chat-list"),
+  filteredList: document.querySelector("#filtered-list"),
+  rawChatCount: document.querySelector("#raw-chat-count"),
+  filteredCount: document.querySelector("#filtered-count"),
   actorBars: document.querySelector("#actor-bars"),
   alertStack: document.querySelector("#alert-stack"),
   sparkGrid: document.querySelector("#spark-grid"),
+  sparkBatchStatus: document.querySelector("#spark-batch-status"),
+  sparkBatchSummary: document.querySelector("#spark-batch-summary"),
+  sparkBatchGrid: document.querySelector("#spark-batch-grid"),
   timelineChart: document.querySelector("#timeline-chart"),
   searchInput: document.querySelector("#search-input"),
   filterButtons: document.querySelectorAll(".filter-button"),
@@ -227,83 +105,283 @@ const selectors = {
   refreshDemo: document.querySelector("#refresh-demo"),
   syncAws: document.querySelector("#sync-aws"),
   syncStatus: document.querySelector("#sync-status"),
-  dataMode: document.querySelector("#data-mode")
+  dataMode: document.querySelector("#data-mode"),
+  kafkaLabel: document.querySelector(".kafka-label")
 };
 
-// ── DATA LOADING ──────────────────────────────────────────────────────────
-async function loadSnapshot() {
-  try {
-    const response = await fetch("./data/dashboard_snapshot.json", { cache: "no-store" });
-    if (response.ok) {
-      state.snapshot = await response.json();
-    }
-  } catch {
-    state.snapshot = fallbackSnapshot;
-  }
-  await mergeSyncedAwsFiles();
-}
-
-async function mergeSyncedAwsFiles() {
-  const [counts, nlpEvents, alerts] = await Promise.all([
-    fetchJson("./data/dashboard_counts.json"),
-    fetchJsonLines("./data/flink_nlp_stream_results_sample.jsonl"),
-    fetchJsonLines("./data/flink_alerts_sample.jsonl")
-  ]);
-  const sparkSummaries = await Promise.all([
-    fetchText("./data/spark_job2_rules_summary.md"),
-    fetchText("./data/spark_job4_ml_summary.md"),
-    fetchText("./data/spark_job5_hybrid_summary.md")
-  ]);
-
-  if (counts?.counts) {
-    state.snapshot.counts = { ...state.snapshot.counts, ...counts.counts };
-    state.snapshot.generated_at = counts.generated_at || state.snapshot.generated_at;
-    state.snapshot.data_mode = "aws_synced";
-  }
-
-  if (nlpEvents.length) {
-    state.snapshot.stream_events = nlpEvents.map((event) => ({
-      source: "stream",
-      ...event
-    }));
-  }
-
-  if (alerts.length) {
-    state.snapshot.alerts = alerts.map((event) => ({
-      source: "alert",
-      ...event
-    }));
-  }
-
-  const parsedSparkJobs = parseSparkSummaries(sparkSummaries);
-  if (parsedSparkJobs.length) {
-    state.snapshot.spark_jobs = parsedSparkJobs;
-  }
-}
-
+// ── AWS STREAM START ──────────────────────────────────────────────────────
 async function requestAwsSync() {
+  if (state.awsConnected) return;
   selectors.syncAws.disabled = true;
-  selectors.syncAws.textContent = "Sincronizando...";
-  setSyncStatus("Consultando EMR por SSH y actualizando JSONL locales...", "ok");
+  selectors.syncAws.textContent = "Conectando...";
+  resetStreamingState();
+  setSyncStatus("Iniciando Kafka, producer y jobs Flink en EMR...", "ok");
 
   try {
-    const response = await fetch("/api/sync", { method: "POST" });
+    const response = await fetch("/api/aws/start", { method: "POST" });
     const result = await response.json();
     if (!response.ok || !result.ok) {
-      throw new Error(result.error || "No se pudo sincronizar AWS");
+      throw new Error(result.error || "No se pudo iniciar AWS");
     }
-    // Reset stream buffer on successful sync so new data flows in fresh
-    state.masterQueue = [];
-    state.pointer = 0;
-    await loadSnapshot();
-    renderAll();
-    setSyncStatus(`AWS sincronizado: ${state.snapshot.generated_at || "snapshot actualizado"}`, "ok");
+    state.awsConnected = true;
+    state.dataSize = Number(result.data_size || state.dataSize || 0);
+    state.sparkBatchSize = Number(result.spark_batch_size || state.sparkBatchSize || 1000);
+    state.snapshot.data_mode = "aws_streaming";
+    selectors.syncAws.textContent = "Conectado";
+    if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka activo";
+    setSyncStatus("AWS conectado. Recibiendo deltas desde Kafka cada 3 segundos.", "ok");
+    startPolling();
+    fetchLiveDelta();
+    fetchAwsStatus();
+    fetchSparkStatus();
   } catch (error) {
-    setSyncStatus(`AWS no disponible ahora: ${error.message}. Se mantiene snapshot local validado.`, "error");
-  } finally {
+    state.awsConnected = false;
     selectors.syncAws.disabled = false;
-    selectors.syncAws.textContent = "Sincronizar AWS";
+    selectors.syncAws.textContent = "Conectar AWS";
+    if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
+    state.snapshot.data_mode = "disconnected";
+    renderCounts();
+    setSyncStatus(`AWS no disponible: ${error.message}. El dashboard queda vacio, sin fallback local.`, "error");
   }
+}
+
+async function requestAwsStop() {
+  selectors.refreshDemo.disabled = true;
+  selectors.refreshDemo.classList.add("is-busy");
+  selectors.refreshDemo.textContent = "Deteniendo...";
+  selectors.syncAws.disabled = true;
+  setSyncStatus("Deteniendo Kafka y procesos streaming en EMR...", "ok");
+
+  try {
+    const response = await fetch("/api/aws/stop", { method: "POST" });
+    const result = await response.json();
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error || "No se pudo detener AWS");
+    }
+    setSyncStatus("Streaming detenido. Puedes volver a conectar AWS.", "ok");
+  } catch (error) {
+    setSyncStatus(`No se pudo confirmar el stop remoto: ${error.message}. La sesion local fue reiniciada.`, "error");
+  } finally {
+    resetStreamingState();
+    selectors.syncAws.disabled = false;
+    selectors.syncAws.textContent = "Conectar AWS";
+    selectors.refreshDemo.classList.remove("is-busy");
+    selectors.refreshDemo.textContent = "Reiniciar cinta";
+    selectors.refreshDemo.disabled = false;
+  }
+}
+
+function startPolling() {
+  if (!state.pollingHandle) state.pollingHandle = window.setInterval(fetchLiveDelta, 3000);
+  if (!state.statusPollingHandle) state.statusPollingHandle = window.setInterval(fetchAwsStatus, 5000);
+  if (!state.sparkPollingHandle) state.sparkPollingHandle = window.setInterval(fetchSparkStatus, 5000);
+}
+
+async function fetchLiveDelta() {
+  if (!state.awsConnected) return;
+  if (state.liveRefreshInFlight) return;
+  state.liveRefreshInFlight = true;
+
+  const params = new URLSearchParams({
+    maxRaw: "400",
+    maxFlink: "600",
+    maxAlerts: "80"
+  });
+  if (state.liveCursor) {
+    params.set("cursor", JSON.stringify(state.liveCursor));
+  }
+
+  try {
+    const response = await fetch(`/api/live-delta?${params.toString()}`, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo obtener delta live");
+    applyLiveDelta(result);
+    setSyncStatus(`Streaming activo: ${result.generated_at || "live"}`, "ok");
+  } catch (error) {
+    setSyncStatus(`Stream remoto no disponible: ${error.message}. Se conserva el ultimo estado.`, "error");
+  } finally {
+    state.liveRefreshInFlight = false;
+  }
+}
+
+async function fetchAwsStatus() {
+  if (!state.awsConnected) return;
+  try {
+    const response = await fetch("/api/aws/status", { cache: "no-store" });
+    const status = await response.json();
+    if (!response.ok || !status.ok) throw new Error(status.error || "No se pudo obtener estado AWS");
+    state.awsStatus = status;
+    state.dataSize = Number(status.data_size || state.dataSize || 0);
+    state.sparkBatchSize = Number(status.spark_batch_size || state.sparkBatchSize || 1000);
+    maybeStartNextSparkBatch(status);
+    renderSparkBatch();
+  } catch (error) {
+    if (selectors.sparkBatchStatus) selectors.sparkBatchStatus.textContent = `aws status error`;
+  }
+}
+
+async function fetchSparkStatus() {
+  if (!state.awsConnected) {
+    renderSparkBatch();
+    return;
+  }
+  try {
+    const response = await fetch("/api/spark/status", { cache: "no-store" });
+    const status = await response.json();
+    if (!response.ok || !status.ok) throw new Error(status.error || "No se pudo obtener estado Spark");
+    state.sparkBatch = {
+      batches: status.batches || {},
+      latest_batch_id: status.latest_batch_id || ""
+    };
+    updateSparkMetricFromBatches();
+    renderSparkBatch();
+  } catch {
+    if (selectors.sparkBatchStatus) selectors.sparkBatchStatus.textContent = "spark status error";
+  }
+}
+
+async function maybeStartNextSparkBatch(status = state.awsStatus) {
+  if (!state.awsConnected || state.sparkStartInFlight || !status) return;
+  const eligible = Number(status.eligible_spark_target || 0);
+  const batchSize = Number(status.spark_batch_size || state.sparkBatchSize || 1000);
+  if (!eligible || !batchSize) return;
+
+  const batches = state.sparkBatch.batches || {};
+  const hasRunning = Object.values(batches).some((batch) => batch.status === "running" || batch.status === "queued");
+  if (hasRunning) return;
+
+  let target = 0;
+  for (let next = batchSize; next <= eligible; next += batchSize) {
+    const id = sparkBatchId(next);
+    const existing = batches[id];
+    if (!existing && !state.sparkStartingTargets.has(next)) {
+      target = next;
+      break;
+    }
+  }
+  if (!target) return;
+
+  state.sparkStartInFlight = true;
+  state.sparkStartingTargets.add(target);
+  renderSparkBatch();
+  try {
+    const params = new URLSearchParams({ target: String(target), batchId: sparkBatchId(target) });
+    const response = await fetch(`/api/spark/start?${params.toString()}`, { method: "POST" });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo iniciar Spark");
+    await fetchSparkStatus();
+  } catch (error) {
+    const id = sparkBatchId(target);
+    state.sparkBatch.batches[id] = {
+      batch_id: id,
+      target_count: target,
+      spark_batch_size: batchSize,
+      status: "failed",
+      current_job: "start",
+      message: error.message,
+      jobs: {},
+      outputs: {}
+    };
+    renderSparkBatch();
+  } finally {
+    state.sparkStartInFlight = false;
+  }
+}
+
+function applyLiveDelta(delta) {
+  state.liveCursor = delta.cursor || state.liveCursor;
+  state.lastLiveGeneratedAt = delta.generated_at || state.lastLiveGeneratedAt;
+
+  const rawMessages = (delta.raw_messages || []).map((event) => normalizeIncomingEvent(event, "raw"));
+  const flinkEvents = (delta.flink_events || []).map((event) => normalizeIncomingEvent(event, "stream"));
+  const filteredMessages = (delta.filtered_messages || []).map((event) => normalizeIncomingEvent(event, "alert"));
+
+  state.sessionCounts.raw_youtube_chat += rawMessages.length;
+  state.sessionCounts.nlp_stream_results += flinkEvents.length;
+  state.sessionCounts.alerts_polarization += filteredMessages.filter((event) => event.source_topic === "alerts_polarization" || event.source === "alert").length;
+  state.sessionCounts.filtered_messages += filteredMessages.length;
+  state.snapshot.counts = { ...state.snapshot.counts, ...state.sessionCounts };
+  state.snapshot.generated_at = delta.generated_at || state.snapshot.generated_at;
+  state.snapshot.data_mode = delta.data_mode || "aws_delta";
+  renderCounts();
+
+  if (flinkEvents.length) {
+    state.snapshot.stream_events = [...(state.snapshot.stream_events || []), ...flinkEvents].slice(-1000);
+  }
+
+  if (filteredMessages.length) {
+    state.snapshot.alerts = [...(state.snapshot.alerts || []), ...filteredMessages].slice(-300);
+  }
+
+  appendRawMessages(rawMessages);
+  appendFilteredMessages(filteredMessages);
+  appendStreamEvents(flinkEvents);
+
+  if (flinkEvents.length || filteredMessages.length) {
+    renderActors();
+    drawTimeline();
+    renderAlertsAppend(filteredMessages);
+  }
+}
+
+function normalizeCounts(counts) {
+  return {
+    raw_youtube_chat: counts.raw_youtube_chat ?? counts.raw ?? 0,
+    nlp_stream_results: counts.nlp_stream_results ?? counts.flink ?? 0,
+    alerts_polarization: counts.alerts_polarization ?? counts.alerts ?? 0,
+    filtered_messages: counts.filtered_messages ?? state.snapshot.counts?.filtered_messages ?? 0,
+    spark_curated_rows: counts.spark_curated_rows ?? 0,
+    spark_aggregates_rows: counts.spark_aggregates_rows ?? state.snapshot.counts?.spark_aggregates_rows ?? 0
+  };
+}
+
+function resetStreamingState() {
+  if (state.pollingHandle) {
+    window.clearInterval(state.pollingHandle);
+    state.pollingHandle = null;
+  }
+  if (state.statusPollingHandle) {
+    window.clearInterval(state.statusPollingHandle);
+    state.statusPollingHandle = null;
+  }
+  if (state.sparkPollingHandle) {
+    window.clearInterval(state.sparkPollingHandle);
+    state.sparkPollingHandle = null;
+  }
+  state.snapshot = emptyStreamingSnapshot();
+  state.awsConnected = false;
+  state.masterQueue = [];
+  state.rawQueue = [];
+  state.filteredQueue = [];
+  state.pointer = 0;
+  state.emitSeq = 0;
+  state.renderedStreamSeq = 0;
+  state.renderedRawSeq = 0;
+  state.renderedFilteredSeq = 0;
+  state.renderedAlertSeq = 0;
+  state.liveCursor = null;
+  state.actorCounts = {};
+  state.actorTimeline = [];
+  state.sessionCounts = { ...state.snapshot.counts };
+  state.awsStatus = null;
+  state.sparkBatch = { batches: {}, latest_batch_id: "" };
+  state.sparkStartInFlight = false;
+  state.sparkStartingTargets = new Set();
+  if (selectors.streamList) selectors.streamList.innerHTML = "";
+  if (selectors.rawChatList) selectors.rawChatList.innerHTML = "";
+  if (selectors.filteredList) selectors.filteredList.innerHTML = "";
+  if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
+  renderAll();
+}
+
+function normalizeIncomingEvent(event, source) {
+  return {
+    source,
+    ...event,
+    source: event.source || source,
+    __stream_seq: ++state.emitSeq,
+    __chart_ts: Date.now()
+  };
 }
 
 function setSyncStatus(message, mode = "") {
@@ -312,87 +390,18 @@ function setSyncStatus(message, mode = "") {
   if (mode) selectors.syncStatus.classList.add(mode);
 }
 
-// ── FETCH HELPERS ─────────────────────────────────────────────────────────
-async function fetchJson(path) {
-  try {
-    const response = await fetch(path, { cache: "no-store" });
-    if (!response.ok) return null;
-    return response.json();
-  } catch {
-    return null;
-  }
-}
-
-async function fetchJsonLines(path) {
-  try {
-    const response = await fetch(path, { cache: "no-store" });
-    if (!response.ok) return [];
-    const text = await response.text();
-    return text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-async function fetchText(path) {
-  try {
-    const response = await fetch(path, { cache: "no-store" });
-    if (!response.ok) return "";
-    return response.text();
-  } catch {
-    return "";
-  }
-}
-
-function parseSparkSummaries(summaries) {
-  const descriptors = [
-    {
-      name: "Job 2 Reglas locales",
-      output: "s3://figuretibucket/output/batch/from_kafka/job2_rules/run_rules_kafka_test/"
-    },
-    {
-      name: "Job 4 OffendES inference",
-      output: "s3://figuretibucket/output/batch/from_kafka/job4_ml_inference/run_sparkml_offendes_kafka_test/"
-    },
-    {
-      name: "Job 5 Hibrido + agregados",
-      output: "s3://figuretibucket/output/batch/from_kafka/job5_hybrid/run_hybrid_kafka_test/"
-    }
-  ];
-
-  return summaries
-    .map((summary, index) => {
-      if (!summary) return null;
-      const rows = Number(
-        (summary.match(/(?:OUTPUT_ROWS|Output rows|Rows|VALIDATION_COUNT)\D+(\d+)/i) || [])[1] || 105
-      );
-      return {
-        ...descriptors[index],
-        rows,
-        status: "SUCCESS",
-        summary: summary.replace(/\s+/g, " ").slice(0, 220)
-      };
-    })
-    .filter(Boolean);
-}
-
 // ── EVENT HELPERS ─────────────────────────────────────────────────────────
 function eventText(event) {
   const payload = event.payload || {};
   return (
     payload.stream_text ||
     payload.message_text ||
+    payload.message_clean ||
+    payload.message_raw ||
+    event.message_clean ||
+    event.message_raw ||
+    event.raw?.message_clean ||
+    event.raw?.message_raw ||
     payload.hybrid_risk_reason ||
     payload.reason ||
     event.event_type ||
@@ -408,7 +417,12 @@ function eventTags(event) {
   if (payload.hybrid_risk_level) tags.push(`risk:${payload.hybrid_risk_level}`);
   if (payload.actor) tags.push(payload.actor);
   if (payload.alert_type) tags.push(payload.alert_type);
+  if (event.source === "raw") tags.push("raw_youtube_chat");
   return tags.filter(Boolean).slice(0, 4);
+}
+
+function rawAuthor(event) {
+  return event.author || event.raw?.author || event.payload?.author || "youtube_user";
 }
 
 function allEvents() {
@@ -435,13 +449,22 @@ function tickStream() {
   const pool = allEvents();
   if (!pool.length) { renderStream(); return; }
 
+  const emitted = [];
+
   // Emit 3 events per tick for large datasets (7k cycles in ~8 min at 500ms)
   for (let i = 0; i < 3; i++) {
-    const next = pool[state.pointer % pool.length];
-    state.masterQueue = [next, ...state.masterQueue].slice(0, state.MAX_QUEUE);
+    const next = {
+      ...pool[state.pointer % pool.length],
+      __stream_seq: ++state.emitSeq,
+      __chart_ts: Date.now()
+    };
+    emitted.push(next);
+    state.masterQueue.push(next);
+    if (state.masterQueue.length > state.MAX_QUEUE) state.masterQueue.shift();
     state.pointer++;
   }
 
+  updateActorTimeline(emitted);
   renderStream();
 
   // Recalculate charts every 15 ticks (~7.5 s)
@@ -452,76 +475,182 @@ function tickStream() {
   }
 }
 
-function renderStream() {
+function eventMatchesActiveView() {
+  return true;
+}
+
+function filteredMessageMatchesQuery(event) {
   const query = state.query.trim().toLowerCase();
+  if (!query) return true;
+  const searchBlob = [
+    eventText(event),
+    event.job_name || "",
+    event.event_type || "",
+    event.payload?.actor || "",
+    event.payload?.alert_type || "",
+    ...eventTags(event)
+  ]
+    .join(" ")
+    .toLowerCase();
+  return searchBlob.includes(query);
+}
 
-  const visible = state.masterQueue.filter((event) => {
-    // Filter by source type
-    const byFilter = state.filter === "all" || event.source === state.filter;
-    if (!byFilter) return false;
+function streamItemHtml(event) {
+  const tags = eventTags(event)
+    .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
+    .join("");
+  return `
+    <article class="stream-item ${escapeHtml(event.source || "stream")}" data-seq="${event.__stream_seq || ""}">
+      <div class="stream-copy">
+        <strong>${escapeHtml(event.job_name || "pipeline_event")}</strong>
+        <p>${escapeHtml(eventText(event))}</p>
+        <div class="stream-tags">${tags}</div>
+      </div>
+      <span class="offset-pill">p${escapeHtml(String(event.source_partition ?? "-"))} / o${escapeHtml(String(event.source_offset ?? "-"))}</span>
+    </article>
+  `;
+}
 
-    // Search only in human-readable fields (not raw JSON)
-    if (!query) return true;
-    const searchBlob = [
-      eventText(event),
-      event.job_name || "",
-      event.event_type || "",
-      event.payload?.actor || "",
-      event.payload?.alert_type || "",
-      ...eventTags(event)
-    ]
-      .join(" ")
-      .toLowerCase();
-    return searchBlob.includes(query);
-  });
+function renderStream(options = {}) {
+  const reset = Boolean(options.reset);
+  const list = selectors.streamList;
+  const wasNearBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 24;
 
-  if (!visible.length && state.masterQueue.length > 0) {
-    selectors.streamList.innerHTML =
-      '<p style="color:var(--muted);font-size:0.86rem;padding:12px 4px;">Sin resultados para el filtro actual.</p>';
+  if (reset) {
+    const visible = state.masterQueue.filter(eventMatchesActiveView).slice(-70);
+    state.renderedStreamSeq = state.emitSeq;
+
+    if (!visible.length && state.masterQueue.length > 0) {
+      list.innerHTML = '<p class="stream-empty">Sin resultados para el filtro actual.</p>';
+      return;
+    }
+
+    list.innerHTML = visible.map(streamItemHtml).join("");
+    list.scrollTop = list.scrollHeight;
     return;
   }
 
-  selectors.streamList.innerHTML = visible
-    .slice(0, 22)
-    .map((event) => {
-      const tags = eventTags(event)
-        .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
-        .join("");
-      return `
-        <article class="stream-item ${escapeHtml(event.source || "stream")}">
-          <div class="stream-copy">
-            <strong>${escapeHtml(event.job_name || "pipeline_event")}</strong>
-            <p>${escapeHtml(eventText(event))}</p>
-            <div class="stream-tags">${tags}</div>
-          </div>
-          <span class="offset-pill">p${escapeHtml(String(event.source_partition ?? "-"))} / o${escapeHtml(String(event.source_offset ?? "-"))}</span>
-        </article>
-      `;
-    })
+  const nextEvents = state.masterQueue
+    .filter((event) => (event.__stream_seq || 0) > state.renderedStreamSeq)
+    .filter(eventMatchesActiveView);
+
+  state.renderedStreamSeq = state.emitSeq;
+  if (!nextEvents.length) return;
+
+  const empty = list.querySelector(".stream-empty");
+  if (empty) empty.remove();
+
+  list.insertAdjacentHTML("beforeend", nextEvents.map(streamItemHtml).join(""));
+
+  while (list.children.length > 80) {
+    list.removeChild(list.firstElementChild);
+  }
+
+  if (wasNearBottom) {
+    list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  }
+}
+
+function appendStreamEvents(events) {
+  if (!events.length) return;
+  state.masterQueue.push(...events);
+  if (state.masterQueue.length > state.MAX_QUEUE) {
+    state.masterQueue = state.masterQueue.slice(-state.MAX_QUEUE);
+  }
+  updateActorTimeline(events);
+  renderStream();
+}
+
+function filteredName(event) {
+  return event.payload?.actor || event.payload?.author || event.author || event.raw?.author || event.payload?.alert_type || event.event_type || "mensaje_filtrado";
+}
+
+function categoryText(event) {
+  return eventTags(event).join(", ") || "sin_categoria";
+}
+
+function chatItemHtml(event, mode = "raw") {
+  const tags = eventTags(event)
+    .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
     .join("");
+  const title = mode === "raw" ? rawAuthor(event) : filteredName(event);
+  return `
+    <article class="stream-item ${escapeHtml(mode === "raw" ? "raw" : "alert")}" data-seq="${event.__stream_seq || ""}">
+      <div class="stream-copy">
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(eventText(event))}</p>
+        ${mode === "filtered" ? `<p class="category-line">Categoria: ${escapeHtml(categoryText(event))}</p>` : ""}
+        <div class="stream-tags">${tags}</div>
+      </div>
+      <span class="offset-pill">p${escapeHtml(String(event.source_partition ?? "-"))} / o${escapeHtml(String(event.source_offset ?? "-"))}</span>
+    </article>
+  `;
+}
+
+function appendChatList(list, events, renderedKey, maxChildren, mode) {
+  if (!list || !events.length) return;
+  const wasNearBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 24;
+  const nextEvents = events.filter((event) => (event.__stream_seq || 0) > state[renderedKey]);
+  if (!nextEvents.length) return;
+  state[renderedKey] = Math.max(...nextEvents.map((event) => event.__stream_seq || 0), state[renderedKey]);
+
+  const empty = list.querySelector(".stream-empty");
+  if (empty) empty.remove();
+
+  list.insertAdjacentHTML("beforeend", nextEvents.map((event) => chatItemHtml(event, mode)).join(""));
+  while (list.children.length > maxChildren) {
+    list.removeChild(list.firstElementChild);
+  }
+  if (wasNearBottom) {
+    list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  }
+}
+
+function appendRawMessages(events) {
+  if (!events.length) return;
+  state.rawQueue.push(...events);
+  state.rawQueue = state.rawQueue.slice(-180);
+  appendChatList(selectors.rawChatList, events, "renderedRawSeq", 120, "raw");
+  if (selectors.rawChatCount) animateCount(selectors.rawChatCount, state.snapshot.counts?.raw_youtube_chat || state.rawQueue.length);
+}
+
+function appendFilteredMessages(events) {
+  if (!events.length) return;
+  state.filteredQueue.push(...events);
+  state.filteredQueue = state.filteredQueue.slice(-300);
+  renderFilteredMessages();
+}
+
+function renderFilteredMessages() {
+  const visible = state.filteredQueue.filter(filteredMessageMatchesQuery).slice(-120);
+  selectors.filteredList.innerHTML = visible.map((event) => chatItemHtml(event, "filtered")).join("");
+  selectors.filteredList.scrollTop = selectors.filteredList.scrollHeight;
+  if (selectors.filteredCount) {
+    const value = state.query.trim() ? visible.length : (state.snapshot.counts?.filtered_messages || state.filteredQueue.length);
+    animateCount(selectors.filteredCount, value);
+  }
 }
 
 // ── COUNT-UP ANIMATION ────────────────────────────────────────────────────
 function animateCount(element, newValue) {
-  const current = parseInt(String(element.textContent).replace(/[^0-9]/g, ""), 10) || 0;
+  const current = Number(element.dataset.value ?? String(element.textContent).replace(/[^0-9]/g, "")) || 0;
   if (current === newValue) return;
 
-  const diff = newValue - current;
-  const steps = Math.min(Math.abs(diff), 40);
-  const stepValue = diff / steps;
-  let step = 0;
-
-  element.classList.add("updating");
-  setTimeout(() => element.classList.remove("updating"), 420);
-
-  const timer = setInterval(() => {
-    step++;
-    element.textContent = Math.round(current + stepValue * step).toLocaleString();
-    if (step >= steps) {
-      clearInterval(timer);
-      element.textContent = newValue.toLocaleString();
-    }
-  }, 22);
+  element.dataset.value = String(newValue);
+  element.classList.remove("updating");
+  element.innerHTML = `
+    <span class="count-roll" aria-hidden="true">
+      <span class="count-old">${current.toLocaleString()}</span>
+      <span class="count-new">${newValue.toLocaleString()}</span>
+    </span>
+    <span class="sr-only">${newValue.toLocaleString()}</span>
+  `;
+  requestAnimationFrame(() => element.classList.add("updating"));
+  setTimeout(() => {
+    element.classList.remove("updating");
+    element.textContent = newValue.toLocaleString();
+    element.dataset.value = String(newValue);
+  }, 520);
 }
 
 function renderCounts() {
@@ -540,32 +669,91 @@ function renderCounts() {
     if (el) animateCount(el, val);
   }
 
+  if (selectors.rawChatCount) animateCount(selectors.rawChatCount, counts.raw_youtube_chat ?? 0);
+  if (selectors.filteredCount) animateCount(selectors.filteredCount, counts.filtered_messages ?? state.filteredQueue.length);
+
   if (selectors.dataMode) {
-    selectors.dataMode.textContent =
-      state.snapshot.data_mode === "aws_synced" ? "aws sincronizado" : "snapshot local";
+    const modeLabels = {
+      disconnected: "desconectado",
+      aws_streaming: "aws streaming",
+      aws_delta: "aws delta",
+      starting: "conectando"
+    };
+    selectors.dataMode.textContent = modeLabels[state.snapshot.data_mode] || "desconectado";
   }
 }
 
 // ── ACTORS ────────────────────────────────────────────────────────────────
-function computeActors() {
-  // Start from snapshot base actors
-  const base = (state.snapshot.actors || []).map((a) => ({ ...a }));
-  const byName = {};
-  for (const a of base) {
-    byName[a.name] = { name: a.name, score: a.score, mentions: a.mentions };
+function normalizeActorKey(rawActor) {
+  if (!rawActor) return "";
+  const actor = String(rawActor).toLowerCase();
+  if (actor.includes("keiko") || actor.includes("fujimori")) return "keiko_fujimori_fp";
+  if (actor.includes("onpe") || actor.includes("jne")) return "onpe_jne";
+  if (actor.includes("castillo") || actor.includes("peru libre")) return "castillo_peru_libre";
+  if (actor.includes("juntos") || actor === "jp" || actor.includes("jp_")) return "jp_juntos_por_el_peru";
+  if (actor.includes("porky") || actor.includes("aliaga") || actor.includes("rla")) return "lopez_aliaga_porky";
+  if (actor.includes("antauro")) return "antauro_humala";
+  return actor.replace(/\s+/g, "_");
+}
+
+function seedActorTimeline() {
+  if (state.actorTimeline.length) return;
+
+  for (const actor of state.snapshot.actors || []) {
+    const key = normalizeActorKey(actor.name);
+    state.actorCounts[key] = Math.round(actor.mentions || actor.score || 0);
   }
 
-  // Augment from live masterQueue events that have actor data
-  for (const event of state.masterQueue) {
-    const actor = event.payload?.actor;
-    if (!actor) continue;
-    // Try to match to existing actor by normalized key
-    const actorNorm = actor.replace(/_/g, " ").toLowerCase();
-    const matched = Object.keys(byName).find((name) => name.toLowerCase().includes(actorNorm.split(" ")[0]));
-    if (matched) {
-      byName[matched].mentions += 0.5;
-      byName[matched].score += event.payload?.local_risk_score_stream || 0.5;
+  const now = Date.now();
+  for (let i = 8; i >= 0; i--) {
+    const scale = (9 - i) / 9;
+    const values = {};
+    for (const [key, value] of Object.entries(state.actorCounts)) {
+      values[key] = Math.max(0, Math.round(value * scale));
     }
+    const d = new Date(now - i * 10000);
+    state.actorTimeline.push({
+      ts: d.getTime(),
+      label: d.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      values
+    });
+  }
+}
+
+function updateActorTimeline(events) {
+  let changed = false;
+  for (const event of events) {
+    const key = normalizeActorKey(event.payload?.actor);
+    if (!key) continue;
+    state.actorCounts[key] = (state.actorCounts[key] || 0) + 1;
+    changed = true;
+  }
+
+  if (!state.actorTimeline.length || changed || state.chartTick % 2 === 0) {
+    const now = new Date();
+    state.actorTimeline.push({
+      ts: now.getTime(),
+      label: now.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      values: { ...state.actorCounts }
+    });
+    state.actorTimeline = state.actorTimeline.slice(-90);
+  }
+}
+
+function computeActors() {
+  if (!Object.values(state.actorCounts).some((value) => value > 0) && !state.masterQueue.length) return [];
+  const byName = {};
+  for (const series of ACTOR_SERIES) {
+    const value = state.actorCounts[series.key] || 0;
+    byName[series.key] = { name: series.label, score: value, mentions: value };
+  }
+
+  for (const event of state.masterQueue) {
+    const key = normalizeActorKey(event.payload?.actor);
+    if (!key) continue;
+    if (!byName[key]) byName[key] = { name: key.replace(/_/g, " "), score: 0, mentions: 0 };
+    byName[key].mentions += 0.1;
+    byName[key].score += event.payload?.local_risk_score_stream || 0.1;
   }
 
   return Object.values(byName).sort((a, b) => b.mentions - a.mentions).slice(0, 8);
@@ -591,19 +779,31 @@ function renderActors() {
 // ── ALERTS ────────────────────────────────────────────────────────────────
 function renderAlerts() {
   const alerts = state.snapshot.alerts || [];
-  selectors.alertStack.innerHTML = alerts
-    .map(
-      (alert) => `
-      <article class="alert-card">
-        <strong>${escapeHtml(alert.payload?.alert_type || "risk_alert")} · ${escapeHtml(alert.payload?.severity || "medium")}</strong>
-        <p>${escapeHtml(alert.payload?.message_text || alert.payload?.reason || "Alerta detectada")}</p>
-        <div class="stream-tags">${eventTags(alert)
-          .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
-          .join("")}</div>
-      </article>
-    `
-    )
-    .join("");
+  selectors.alertStack.innerHTML = alerts.map(alertItemHtml).join("");
+  state.renderedAlertSeq = Math.max(0, ...alerts.map((alert) => alert.__stream_seq || 0));
+}
+
+function renderAlertsAppend(events) {
+  if (!events.length) return;
+  const nextEvents = events.filter((event) => (event.__stream_seq || 0) > state.renderedAlertSeq);
+  if (!nextEvents.length) return;
+  state.renderedAlertSeq = Math.max(...nextEvents.map((event) => event.__stream_seq || 0), state.renderedAlertSeq);
+  selectors.alertStack.insertAdjacentHTML("beforeend", nextEvents.map(alertItemHtml).join(""));
+  while (selectors.alertStack.children.length > 80) {
+    selectors.alertStack.removeChild(selectors.alertStack.firstElementChild);
+  }
+}
+
+function alertItemHtml(alert) {
+  return `
+    <article class="alert-card">
+      <strong>${escapeHtml(alert.payload?.alert_type || alert.event_type || "risk_alert")} · ${escapeHtml(alert.payload?.severity || "stream")}</strong>
+      <p>${escapeHtml(alert.payload?.message_text || alert.payload?.stream_text || alert.payload?.reason || "Alerta detectada")}</p>
+      <div class="stream-tags">${eventTags(alert)
+        .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
+        .join("")}</div>
+    </article>
+  `;
 }
 
 // ── SPARK ─────────────────────────────────────────────────────────────────
@@ -623,102 +823,249 @@ function renderSpark() {
     .join("");
 }
 
-// ── TIMELINE CHART ────────────────────────────────────────────────────────
-function computeTimeline() {
-  // Use live masterQueue to build timeline buckets when we have enough data
-  const events = state.masterQueue;
-  if (events.length < 10) return state.snapshot.timeline || [];
+function sparkBatchId(target) {
+  return `batch_${String(target).padStart(7, "0")}`;
+}
 
-  const buckets = {};
-  for (const event of events) {
-    const ts = event.processing_ts || event.payload?.created_at;
-    let label = "00:00";
-    if (ts) {
-      const d = new Date(ts);
-      if (!Number.isNaN(d.getTime())) {
-        const mm = String(d.getUTCMinutes()).padStart(2, "0");
-        const ss = String(Math.floor(d.getUTCSeconds() / 10) * 10).padStart(2, "0");
-        label = `${mm}:${ss}`;
-      }
-    }
-    if (!buckets[label]) buckets[label] = { label, comments: 0, alerts: 0 };
-    buckets[label].comments++;
-    if (event.source === "alert") buckets[label].alerts++;
+function sortedSparkBatches() {
+  return Object.values(state.sparkBatch.batches || {})
+    .sort((a, b) => Number(a.target_count || 0) - Number(b.target_count || 0));
+}
+
+function updateSparkMetricFromBatches() {
+  const completed = sortedSparkBatches().filter((batch) => batch.status === "done");
+  const maxCompleted = completed.reduce((max, batch) => Math.max(max, Number(batch.target_count || batch.rows || 0)), 0);
+  state.sessionCounts.spark_curated_rows = maxCompleted;
+  state.snapshot.counts = { ...state.snapshot.counts, spark_curated_rows: maxCompleted };
+  renderCounts();
+}
+
+function renderSparkBatch() {
+  if (!selectors.sparkBatchSummary || !selectors.sparkBatchGrid || !selectors.sparkBatchStatus) return;
+
+  const batches = sortedSparkBatches();
+  const latest = batches[batches.length - 1];
+  const rawSeen = state.snapshot.counts?.raw_youtube_chat || 0;
+  const dataSize = state.dataSize || "DATA_SIZE";
+  const batchSize = state.sparkBatchSize || 1000;
+  const eligible = state.awsStatus?.eligible_spark_target || 0;
+  const rawLag = state.liveCursor ? "" : "";
+  const running = batches.find((batch) => batch.status === "running" || batch.status === "queued");
+  const statusText = running
+    ? `${running.batch_id}: ${running.current_job || "running"}`
+    : latest
+      ? `${latest.batch_id}: ${latest.status}`
+      : "en espera";
+
+  selectors.sparkBatchStatus.textContent = statusText;
+  selectors.sparkBatchSummary.innerHTML = `
+    <div class="spark-stat"><span>raw visto</span><strong>${escapeHtml(String(rawSeen))}</strong></div>
+    <div class="spark-stat"><span>data size</span><strong>${escapeHtml(String(dataSize))}</strong></div>
+    <div class="spark-stat"><span>batch size</span><strong>${escapeHtml(String(batchSize))}</strong></div>
+    <div class="spark-stat"><span>elegible</span><strong>${escapeHtml(String(eligible))}</strong></div>
+  `;
+
+  if (!batches.length && !state.sparkStartInFlight) {
+    selectors.sparkBatchGrid.innerHTML = '<p class="stream-empty">Spark esperara al primer bloque de 1,000 eventos.</p>';
+    return;
   }
 
-  return Object.values(buckets)
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .slice(-20);
+  const pendingCards = state.sparkStartInFlight
+    ? '<article class="spark-card is-running"><strong>Agendando batch Spark</strong><p>Preparando ejecucion remota.</p></article>'
+    : "";
+  selectors.sparkBatchGrid.innerHTML = pendingCards + batches
+    .map((batch) => {
+      const jobs = batch.jobs || {};
+      const jobRows = ["job1_raw_from_kafka", "job2_rules", "job4_offendes", "job5_hybrid"]
+        .map((jobName) => {
+          const job = jobs[jobName] || {};
+          return `<span class="spark-job ${escapeHtml(job.status || "pending")}">${escapeHtml(jobName.replaceAll("_", " "))}: ${escapeHtml(job.status || "pending")}</span>`;
+        })
+        .join("");
+      const outputs = batch.outputs || {};
+      return `
+        <article class="spark-card ${escapeHtml(batch.status || "queued")}">
+          <strong>${escapeHtml(batch.batch_id || "batch")} · ${escapeHtml(batch.status || "queued")}</strong>
+          <p>Target ${escapeHtml(String(batch.target_count || 0))} · rows ${escapeHtml(String(batch.rows || 0))}</p>
+          <p>${escapeHtml(batch.message || batch.current_job || "Esperando ejecucion")}</p>
+          <div class="spark-jobs">${jobRows}</div>
+          ${outputs.hybrid ? `<p><code>${escapeHtml(outputs.hybrid)}</code></p>` : ""}
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function drawTimeline() {
+  seedActorTimeline();
+  if (state.chartAnimation) cancelAnimationFrame(state.chartAnimation);
+  const start = performance.now();
+  const duration = state.actorTimeline.length > 2 ? 520 : 0;
+  state.chartHeadProgress = duration ? 0 : 1;
+
+  function frame(now) {
+    state.chartHeadProgress = duration ? Math.min(1, (now - start) / duration) : 1;
+    drawActorTimeline();
+    if (state.chartHeadProgress < 1) {
+      state.chartAnimation = requestAnimationFrame(frame);
+    } else {
+      state.chartAnimation = null;
+    }
+  }
+
+  if (duration) {
+    state.chartAnimation = requestAnimationFrame(frame);
+  } else {
+    drawActorTimeline();
+  }
+}
+
+function drawActorTimeline() {
   const canvas = selectors.timelineChart;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
-  const data = computeTimeline();
+  const data = interpolateTimelineHead(state.actorTimeline, state.chartHeadProgress);
   const w = canvas.width;
   const h = canvas.height;
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = "rgba(255,255,255,0.03)";
+  ctx.fillStyle = "rgba(255,255,255,0.025)";
   ctx.fillRect(0, 0, w, h);
 
   if (!data.length) return;
 
-  const pad = 34;
-  const maxComments = Math.max(...data.map((p) => p.comments), 1);
-  const step = (w - pad * 2) / Math.max(data.length - 1, 1);
+  const padLeft = 46;
+  const padRight = 22;
+  const padTop = 18;
+  const padBottom = 30;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+  const activeSeries = ACTOR_SERIES.filter((series) =>
+    data.some((point) => (point.values[series.key] || 0) > 0)
+  );
+  const maxValue = Math.max(
+    5,
+    ...data.flatMap((point) => activeSeries.map((series) => point.values[series.key] || 0))
+  );
 
-  // Grid lines
   ctx.strokeStyle = "rgba(240,200,107,0.1)";
   ctx.lineWidth = 1;
   for (let i = 0; i < 4; i++) {
-    const y = pad + (i * (h - pad * 2)) / 3;
+    const y = padTop + (i * plotH) / 3;
     ctx.beginPath();
-    ctx.moveTo(pad, y);
-    ctx.lineTo(w - pad, y);
+    ctx.moveTo(padLeft, y);
+    ctx.lineTo(w - padRight, y);
     ctx.stroke();
   }
 
-  // Area fill
-  ctx.beginPath();
-  data.forEach((point, index) => {
-    const x = pad + index * step;
-    const y = h - pad - (point.comments / maxComments) * (h - pad * 2);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.lineTo(pad + (data.length - 1) * step, h - pad);
-  ctx.lineTo(pad, h - pad);
-  ctx.closePath();
-  ctx.fillStyle = "rgba(49,209,139,0.07)";
-  ctx.fill();
+  const points = data.slice(-90);
+  const pointStep = plotW / Math.max(points.length - 1, 1);
 
-  // Line
-  ctx.beginPath();
-  data.forEach((point, index) => {
-    const x = pad + index * step;
-    const y = h - pad - (point.comments / maxComments) * (h - pad * 2);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = "#31d18b";
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  // Dots and labels
-  data.forEach((point, index) => {
-    const x = pad + index * step;
-    const y = h - pad - (point.comments / maxComments) * (h - pad * 2);
-    ctx.fillStyle = point.alerts > 0 ? "#ff5a3d" : "#f0c86b";
+  for (const series of activeSeries) {
     ctx.beginPath();
-    ctx.arc(x, y, point.alerts > 0 ? 6 : 4, 0, Math.PI * 2);
+    points.forEach((point, index) => {
+      const x = padLeft + index * pointStep;
+      const value = point.values[series.key] || 0;
+      const y = padTop + plotH - (value / maxValue) * plotH;
+      if (index === 0) ctx.moveTo(x, y);
+      else {
+        const previous = points[index - 1];
+        const prevX = padLeft + (index - 1) * pointStep;
+        const prevY = padTop + plotH - ((previous.values[series.key] || 0) / maxValue) * plotH;
+        const midX = (prevX + x) / 2;
+        ctx.bezierCurveTo(midX, prevY, midX, y, x, y);
+      }
+    });
+    ctx.strokeStyle = series.color;
+    ctx.lineWidth = 2.7;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = series.color;
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    const last = points[points.length - 1];
+    const lastValue = last?.values[series.key] || 0;
+    const lastY = padTop + plotH - (lastValue / maxValue) * plotH;
+    ctx.fillStyle = series.color;
+    ctx.beginPath();
+    ctx.arc(padLeft + plotW, lastY, 4, 0, Math.PI * 2);
     ctx.fill();
-    if (index % Math.max(1, Math.floor(data.length / 8)) === 0) {
-      ctx.fillStyle = "rgba(245,242,223,0.55)";
-      ctx.font = "11px Cascadia Code, Consolas, monospace";
-      ctx.fillText(point.label, x - 16, h - 8);
-    }
-  });
+  }
+
+  ctx.fillStyle = "rgba(245,242,223,0.55)";
+  ctx.font = "11px Cascadia Code, Consolas, monospace";
+  ctx.fillText(points[0]?.label?.slice(0, 5) || "", padLeft, h - 10);
+  ctx.fillText(points[points.length - 1]?.label?.slice(0, 5) || "", w - padRight - 34, h - 10);
+
+  if (state.chartHover) {
+    const index = Math.max(
+      0,
+      Math.min(points.length - 1, Math.round((state.chartHover.x - padLeft) / pointStep))
+    );
+    const point = points[index];
+    const x = padLeft + index * pointStep;
+
+    ctx.strokeStyle = "rgba(245,242,223,0.22)";
+    ctx.beginPath();
+    ctx.moveTo(x, padTop);
+    ctx.lineTo(x, padTop + plotH);
+    ctx.stroke();
+
+    const rows = activeSeries.map((series) => ({
+      ...series,
+      value: point.values[series.key] || 0
+    }));
+    const boxW = 260;
+    const boxH = 28 + rows.length * 18;
+    const boxX = Math.min(Math.max(12, x - boxW / 2), w - boxW - 12);
+    const boxY = 10;
+    ctx.fillStyle = "rgba(5,17,14,0.92)";
+    ctx.strokeStyle = "rgba(240,200,107,0.22)";
+    roundRect(ctx, boxX, boxY, boxW, boxH, 12);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f0c86b";
+    ctx.font = "11px Cascadia Code, Consolas, monospace";
+    ctx.fillText(point.label || "timeline", boxX + 12, boxY + 18);
+    rows.forEach((row, rowIndex) => {
+      const y = boxY + 38 + rowIndex * 18;
+      ctx.fillStyle = row.color;
+      ctx.beginPath();
+      ctx.arc(boxX + 14, y - 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f5f2df";
+      ctx.fillText(`${row.label}: ${row.value}`, boxX + 26, y);
+    });
+  }
+}
+
+function interpolateTimelineHead(points, progress) {
+  if (points.length < 2 || progress >= 1) return points;
+  const copy = points.slice();
+  const previous = copy[copy.length - 2];
+  const current = copy[copy.length - 1];
+  const eased = 1 - Math.pow(1 - progress, 3);
+  const values = {};
+
+  for (const series of ACTOR_SERIES) {
+    const from = previous.values[series.key] || 0;
+    const to = current.values[series.key] || 0;
+    values[series.key] = from + (to - from) * eased;
+  }
+
+  copy[copy.length - 1] = { ...current, values };
+  return copy;
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y, x + width, y, radius);
+  ctx.closePath();
 }
 
 // ── ESCAPE HTML ───────────────────────────────────────────────────────────
@@ -737,38 +1084,42 @@ function bindEvents() {
   selectors.searchInput.addEventListener("input", (event) => {
     state.query = event.target.value;
     clearTimeout(searchDebounce);
-    // Immediate re-render for short queries, debounce for longer ones
     if (state.query.length <= 2) {
-      renderStream();
+      renderFilteredMessages();
     } else {
-      searchDebounce = setTimeout(renderStream, 180);
+      searchDebounce = setTimeout(renderFilteredMessages, 180);
     }
-  });
-
-  selectors.filterButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      selectors.filterButtons.forEach((item) => item.classList.remove("active"));
-      button.classList.add("active");
-      state.filter = button.dataset.filter;
-      // Do NOT reset masterQueue or pointer — just re-render the existing buffer
-      // with the new filter applied. Events that already passed stay visible.
-      renderStream();
-    });
   });
 
   selectors.playStream.addEventListener("click", () => {
     state.playing = !state.playing;
     selectors.playStream.textContent = state.playing ? "Pausar cinta" : "Reanudar cinta";
-    if (!state.playing) renderStream();
+    if (!state.playing) renderStream({ reset: true });
   });
 
   selectors.refreshDemo.addEventListener("click", () => {
-    state.masterQueue = [];
-    state.pointer = 0;
-    renderStream();
+    requestAwsStop();
   });
 
   selectors.syncAws.addEventListener("click", requestAwsSync);
+
+  if (selectors.timelineChart) {
+    selectors.timelineChart.addEventListener("mousemove", (event) => {
+      const rect = selectors.timelineChart.getBoundingClientRect();
+      const scaleX = selectors.timelineChart.width / rect.width;
+      const scaleY = selectors.timelineChart.height / rect.height;
+      state.chartHover = {
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY
+      };
+      drawActorTimeline();
+    });
+
+    selectors.timelineChart.addEventListener("mouseleave", () => {
+      state.chartHover = null;
+      drawActorTimeline();
+    });
+  }
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────
@@ -777,18 +1128,19 @@ function renderAll() {
   renderActors();
   renderAlerts();
   renderSpark();
+  renderSparkBatch();
   drawTimeline();
-  renderStream();
+  renderStream({ reset: true });
+  renderFilteredMessages();
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 async function init() {
-  await loadSnapshot();
+  resetStreamingState();
   renderAll();
   bindEvents();
-  tickStream();
-  // 3 events per tick at 500ms = ~6 events/s; 7000-event pool cycles in ~19 min
-  window.setInterval(tickStream, 500);
+  selectors.syncAws.textContent = "Conectar AWS";
+  setSyncStatus("Frontend listo. AWS aun no se ha iniciado.", "ok");
 }
 
 init();

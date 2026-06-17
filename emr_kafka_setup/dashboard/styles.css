@@ -142,6 +142,10 @@ code {
 }
 
 .kafka-counts strong {
+  display: inline-block;
+  min-width: 4ch;
+  height: 1em;
+  overflow: hidden;
   color: var(--leaf);
   font-weight: 700;
   transition: color 300ms;
@@ -163,7 +167,8 @@ code {
   flex: 0 0 auto;
 }
 
-.hero-stream .stream-list {
+.hero-stream .stream-list,
+.hero-stream .live-chat-list {
   flex: 1 1 0;
   overflow-y: auto;
   max-height: none;
@@ -265,6 +270,26 @@ h2 {
   border-color: rgba(240, 200, 107, 0.54);
 }
 
+.secondary-action.is-busy {
+  position: relative;
+  padding-left: 34px;
+  pointer-events: none;
+}
+
+.secondary-action.is-busy::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border: 2px solid rgba(245, 242, 223, 0.34);
+  border-top-color: var(--cancha);
+  border-radius: 50%;
+  animation: spin 760ms linear infinite;
+}
+
 /* ── PULSE DOT ── */
 .pulse-dot {
   width: 9px;
@@ -334,6 +359,8 @@ h2 {
   font-size: clamp(2rem, 4vw, 3.3rem);
   line-height: 0.92;
   transition: color 300ms;
+  min-height: 1em;
+  overflow: hidden;
 }
 
 .metric-card small {
@@ -346,24 +373,93 @@ h2 {
   color: var(--rocoto);
 }
 
-/* Pulse animation for metric cards when updating */
-@keyframes countPulse {
-  0% { opacity: 1; }
-  40% { opacity: 0.6; }
-  100% { opacity: 1; }
+.count-roll {
+  position: relative;
+  display: inline-grid;
+  min-width: 4ch;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: baseline;
 }
 
-.metric-card strong.updating {
-  animation: countPulse 400ms ease;
+.count-old,
+.count-new {
+  grid-area: 1 / 1;
+  line-height: 1;
+  will-change: transform, opacity;
+}
+
+.count-new {
+  transform: translateY(100%);
+}
+
+.updating .count-old {
+  animation: rollOldUp 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.updating .count-new {
+  animation: rollNewUp 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ── CONTROL STRIP ── */
 .control-strip {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) auto;
+  grid-template-columns: minmax(240px, 1fr);
   gap: 16px;
   align-items: end;
   margin: 18px 0;
+}
+
+.live-feeds-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.1fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  margin-bottom: 18px;
+  align-items: stretch;
+}
+
+.raw-chat-panel,
+.stream-feed-panel,
+.filtered-chat-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 430px;
+  height: clamp(430px, 52vh, 560px);
+  max-height: 560px;
+  overflow: hidden;
+}
+
+.live-chat-list {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(49, 209, 139, 0.2) transparent;
+  scroll-behavior: smooth;
+}
+
+.live-chat-list.filtered {
+  scrollbar-color: rgba(255, 90, 61, 0.24) transparent;
+}
+
+.stream-item.raw::before {
+  background: var(--sky-s3);
 }
 
 .search-box {
@@ -440,11 +536,16 @@ h2 {
 
 /* ── STREAM LIST ── */
 .stream-list {
-  display: grid;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
   gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
   padding-right: 4px;
   scrollbar-width: thin;
   scrollbar-color: rgba(49, 209, 139, 0.2) transparent;
+  scroll-behavior: smooth;
 }
 
 .stream-list::-webkit-scrollbar {
@@ -470,7 +571,8 @@ h2 {
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.035);
-  animation: riseIn 400ms ease both;
+  animation: chatIn 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity;
 }
 
 .stream-item::before {
@@ -508,6 +610,14 @@ h2 {
   overflow: hidden;
 }
 
+.stream-copy .category-line {
+  margin-top: 5px;
+  color: var(--cancha);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.68rem;
+  -webkit-line-clamp: 1;
+}
+
 .stream-tags {
   display: flex;
   flex-wrap: wrap;
@@ -530,6 +640,13 @@ h2 {
   font-size: 0.68rem;
   white-space: nowrap;
   padding-top: 2px;
+}
+
+.stream-empty {
+  margin: 0;
+  padding: 12px 4px;
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 /* ── ACTOR BARS ── */
@@ -558,16 +675,16 @@ h2 {
   border-radius: inherit;
   background: linear-gradient(90deg, var(--leaf), var(--cancha), var(--rocoto));
   transform-origin: left;
-  animation: growBar 700ms ease both;
-  transition: width 600ms ease;
+  transition: width 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 #timeline-chart {
   width: 100%;
-  height: auto;
+  height: 220px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.03);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+  cursor: crosshair;
 }
 
 /* ── ALERT + SPARK ── */
@@ -586,12 +703,95 @@ h2 {
   scrollbar-color: rgba(105, 185, 255, 0.2) transparent;
 }
 
+.spark-batch-panel {
+  margin-top: 16px;
+}
+
+.spark-batch-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.spark-stat {
+  border: 1px solid rgba(105, 185, 255, 0.14);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(105, 185, 255, 0.045);
+}
+
+.spark-stat span {
+  display: block;
+  color: var(--muted);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.spark-stat strong {
+  display: block;
+  margin-top: 4px;
+  font-family: "Bahnschrift", sans-serif;
+  font-size: 1.6rem;
+}
+
+.spark-batch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
 .alert-card,
 .spark-card {
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 16px;
   padding: 14px;
   background: rgba(255, 255, 255, 0.035);
+}
+
+.spark-card.running,
+.spark-card.is-running {
+  border-color: rgba(240, 200, 107, 0.34);
+}
+
+.spark-card.done {
+  border-color: rgba(49, 209, 139, 0.3);
+}
+
+.spark-card.failed {
+  border-color: rgba(255, 90, 61, 0.35);
+}
+
+.spark-jobs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.spark-job {
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.64rem;
+}
+
+.spark-job.done {
+  color: var(--leaf);
+  background: rgba(49, 209, 139, 0.1);
+}
+
+.spark-job.running {
+  color: var(--cancha);
+  background: rgba(240, 200, 107, 0.1);
+}
+
+.spark-job.failed {
+  color: var(--rocoto);
+  background: rgba(255, 90, 61, 0.1);
 }
 
 .alert-card {
@@ -641,12 +841,42 @@ h2 {
   }
 }
 
-@keyframes growBar {
+@keyframes chatIn {
   from {
-    transform: scaleX(0.08);
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
   }
   to {
-    transform: scaleX(1);
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rollOldUp {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes rollNewUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -682,6 +912,7 @@ h2 {
   }
 
   .workspace-grid,
+  .live-feeds-grid,
   .pipeline-map,
   .metric-board {
     grid-template-columns: repeat(2, 1fr);
@@ -706,9 +937,14 @@ h2 {
 
   .pipeline-map,
   .metric-board,
+  .live-feeds-grid,
   .workspace-grid,
   .control-strip {
     grid-template-columns: 1fr;
+  }
+
+  .spark-batch-summary {
+    grid-template-columns: 1fr 1fr;
   }
 
   .chart-panel {
