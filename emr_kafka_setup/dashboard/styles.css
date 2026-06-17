@@ -88,7 +88,7 @@ code {
 
 .hero-copy {
   position: relative;
-  min-height: 300px;
+  min-height: clamp(500px, 62vh, 620px);
   padding: clamp(24px, 4vw, 46px);
   border-radius: var(--radius-xl);
   overflow: hidden;
@@ -155,8 +155,9 @@ code {
 .hero-stream {
   display: flex;
   flex-direction: column;
-  min-height: 500px;
-  max-height: 620px;
+  height: 100%;
+  min-height: clamp(500px, 62vh, 620px);
+  max-height: none;
   border-radius: var(--radius-xl);
   padding: 22px;
   overflow: hidden;
@@ -173,6 +174,17 @@ code {
   overflow-y: auto;
   max-height: none;
   padding-right: 4px;
+}
+
+/* Iguala la altura del chat raw con el bloque hero izquierdo (mismo top/bottom) */
+.hero-copy {
+  height: 100%;
+}
+
+.hero-stream.raw-chat-panel {
+  height: 100%;
+  min-height: clamp(500px, 62vh, 620px);
+  max-height: none;
 }
 
 /* ── EYEBROW, KICKER, LABEL ── */
@@ -344,7 +356,7 @@ h2 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .metric-card {
@@ -505,7 +517,7 @@ h2 {
 /* ── WORKSPACE GRID (3-column analytics) ── */
 .workspace-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 1.6fr) minmax(220px, 1fr) minmax(220px, 1fr);
+  grid-template-columns: minmax(420px, 1.55fr) minmax(320px, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -738,8 +750,44 @@ h2 {
 
 .spark-batch-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 10px;
+  align-content: start;
+}
+
+.spark-batch-workspace {
+  display: grid;
+  grid-template-columns: minmax(520px, 1.45fr) minmax(360px, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.spark-comments-panel {
+  min-height: 520px;
+  max-height: 720px;
+  overflow: hidden;
+  border: 1px solid rgba(105, 185, 255, 0.14);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: rgba(105, 185, 255, 0.035);
+}
+
+.panel-heading.compact {
+  margin-bottom: 12px;
+}
+
+.spark-search {
+  margin-bottom: 10px;
+}
+
+.spark-comments-hint {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.spark-comments-list {
+  max-height: 520px;
 }
 
 .alert-card,
@@ -761,6 +809,22 @@ h2 {
 
 .spark-card.failed {
   border-color: rgba(255, 90, 61, 0.35);
+}
+
+.spark-card.pending {
+  opacity: 0.62;
+  border-style: dashed;
+}
+
+.spark-card[data-clickable="true"] {
+  cursor: pointer;
+}
+
+.spark-card[data-clickable="true"]:hover,
+.spark-card.selected {
+  transform: translateY(-2px);
+  border-color: rgba(105, 185, 255, 0.46);
+  background: rgba(105, 185, 255, 0.07);
 }
 
 .spark-jobs {
@@ -896,6 +960,10 @@ h2 {
     grid-template-columns: 1fr 1fr;
   }
 
+  .spark-batch-workspace {
+    grid-template-columns: 1fr;
+  }
+
   .chart-panel {
     grid-column: 1 / -1;
   }
@@ -907,8 +975,8 @@ h2 {
   }
 
   .hero-stream {
-    min-height: 380px;
-    max-height: 440px;
+    min-height: 500px;
+    height: 500px;
   }
 
   .workspace-grid,
@@ -939,6 +1007,7 @@ h2 {
   .metric-board,
   .live-feeds-grid,
   .workspace-grid,
+  .spark-batch-workspace,
   .control-strip {
     grid-template-columns: 1fr;
   }

@@ -52,6 +52,14 @@ fi
 
 chmod 600 "$PemPath" 2>/dev/null || true
 
+ssh -i "$PemPath" -o StrictHostKeyChecking=no "${UserName}@${HostName}" "mkdir -p /home/hadoop/bigdata-kafka/spark/jobs" >/dev/null
+scp -i "$PemPath" -o StrictHostKeyChecking=no \
+  "$ProjectRoot/emr_kafka_setup/spark/jobs/spark_read_kafka_raw_youtube.py" \
+  "$ProjectRoot/emr_kafka_setup/spark/jobs/spark_rules_from_kafka_parquet.py" \
+  "$ProjectRoot/emr_kafka_setup/spark/jobs/spark_apply_offendes_from_kafka_parquet.py" \
+  "$ProjectRoot/emr_kafka_setup/spark/jobs/spark_hybrid_scoring_from_kafka.py" \
+  "${UserName}@${HostName}:/home/hadoop/bigdata-kafka/spark/jobs/" >/dev/null
+
 ssh -i "$PemPath" -o StrictHostKeyChecking=no "${UserName}@${HostName}" \
   "BATCH_ID='$BatchId' TARGET_COUNT='$TargetCount' SPARK_BATCH_SIZE='$SparkBatchSize' BUCKET='$Bucket' bash -s" <<'REMOTE'
 set -euo pipefail
@@ -168,6 +176,11 @@ trap finish EXIT
 
 update_status "running" "queued" "0" "Spark batch iniciado"
 
+# Limpia los outputs S3 del batch que se recalcula para que los jobs sean idempotentes
+# (solo afecta este batch_id; los modelos en output/batch/models/ no se tocan).
+aws s3 rm "$BASE_RAW/" --recursive >/dev/null 2>&1 || true
+aws s3 rm "$BASE_BATCH/" --recursive >/dev/null 2>&1 || true
+
 CURRENT_JOB="job1_raw_from_kafka"
 LOG1="$LOG_DIR/spark_${BATCH_ID}_job1.log"
 update_status "running" "$CURRENT_JOB" "0" "Leyendo Kafka raw_youtube_chat hacia parquet"
@@ -180,6 +193,7 @@ spark-submit \
   --ending-offsets latest \
   --output-path "$RAW_OUTPUT" \
   --report-path "$RAW_REPORT" \
+  --max-row-number "$TARGET_COUNT" \
   --coalesce 1 > "$LOG1" 2>&1
 CURRENT_ROWS="$(extract_value TOTAL_RECORDS "$LOG1" || echo 0)"
 update_status "done" "$CURRENT_JOB" "$CURRENT_ROWS" "Kafka raw persistido en parquet"

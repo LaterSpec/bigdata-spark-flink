@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("--output-path", required=True)
     parser.add_argument("--report-path", default="")
     parser.add_argument("--coalesce", type=int, default=1)
+    parser.add_argument("--max-row-number", type=int, default=0)
     return parser.parse_args()
 
 
@@ -63,6 +64,16 @@ def markdown_escape(value):
     if value is None:
         return ""
     return str(value).replace("|", "\\|").replace("\n", " ")[:220]
+
+
+def write_text(spark, path, content):
+    jpath = spark.sparkContext._jvm.org.apache.hadoop.fs.Path(path)
+    fs = jpath.getFileSystem(spark.sparkContext._jsc.hadoopConfiguration())
+    stream = fs.create(jpath, True)
+    try:
+        stream.write(bytearray(content.encode("utf-8")))
+    finally:
+        stream.close()
 
 
 def main():
@@ -122,6 +133,8 @@ def main():
         "json_value",
         "raw",
     )
+    if args.max_row_number > 0:
+        output_df = output_df.filter(F.col("row_number").cast("long") <= F.lit(args.max_row_number))
 
     writer_df = output_df.coalesce(args.coalesce) if args.coalesce > 0 else output_df
     writer_df.write.mode("overwrite").parquet(args.output_path)
@@ -226,7 +239,7 @@ def main():
 - El job es una base de ingesta batch desde Kafka. Las reglas peruanas, OffendES Spark ML, scoring hibrido y agregados historicos se conectaran en fases posteriores.
 - El output se escribe en modo `overwrite` para mantener reproducible esta prueba puntual.
 """
-        spark.sparkContext.parallelize([report], 1).saveAsTextFile(report_path)
+        write_text(spark, report_path.rstrip("/") + "/report.md", report)
 
     print(f"TOTAL_RECORDS={total_records}")
     print(f"OUTPUT_PATH={args.output_path}")

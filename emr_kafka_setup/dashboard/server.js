@@ -7,6 +7,7 @@ const { spawn } = require("child_process");
 const root = __dirname;
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "127.0.0.1";
+const runtimeDir = path.join(root, "data", "runtime");
 let awsStarted = false;
 
 const contentTypes = {
@@ -65,6 +66,11 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (requestUrl.pathname === "/api/spark/comments" && request.method === "GET") {
+    runSparkComments(response, requestUrl);
+    return;
+  }
+
   if (requestUrl.pathname === "/api/live-delta" && request.method === "GET") {
     runLiveDelta(response, requestUrl);
     return;
@@ -101,6 +107,7 @@ function runAwsStart(response) {
   }
 
   const dataSize = process.env.DASHBOARD_STREAM_LIMIT || readEnvValue("DATA_SIZE") || "7000";
+  clearRuntimeCache();
   const scriptPath = path.join(root, "scripts", "bootstrap_emr_streaming.sh");
   const args = [
     scriptPath,
@@ -264,6 +271,69 @@ function runSparkStatus(response) {
   runJsonScript(response, "bash", [scriptPath], Number(process.env.DASHBOARD_SPARK_STATUS_TIMEOUT_MS || 45000));
 }
 
+function runSparkComments(response, requestUrl) {
+  if (!awsStarted) {
+    sendJson(response, 409, {
+      ok: false,
+      error: "AWS aun no esta conectado."
+    });
+    return;
+  }
+
+  const batchId = requestUrl.searchParams.get("batchId") || "";
+  if (!/^batch_[0-9]{7}$/.test(batchId)) {
+    sendJson(response, 400, { ok: false, error: "batchId invalido." });
+    return;
+  }
+
+  const limit = requestUrl.searchParams.get("limit") || "250";
+  const scriptPath = path.join(root, "scripts", "spark_batch_comments_from_aws.sh");
+  const child = spawn("bash", [scriptPath, "--batch-id", batchId, "--limit", limit], { cwd: root });
+  let stdout = "";
+  let stderr = "";
+  const killTimer = setTimeout(() => {
+    child.kill("SIGTERM");
+  }, Number(process.env.DASHBOARD_SPARK_COMMENTS_TIMEOUT_MS || 120000));
+
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk.toString();
+  });
+
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  child.on("error", (error) => {
+    clearTimeout(killTimer);
+    sendJson(response, 500, { ok: false, error: error.message, stderr });
+  });
+
+  child.on("close", (code) => {
+    clearTimeout(killTimer);
+    if (code !== 0) {
+      sendJson(response, 502, {
+        ok: false,
+        error: stderr.trim() || stdout.trim() || "spark_batch_comments_from_aws.sh fallo",
+        stderr
+      });
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(stdout.trim().split(/\n/).pop() || "{}");
+      if (payload.ok) writeRuntimeJson(`spark_batch_comments_${batchId}.json`, payload);
+      sendJson(response, 200, payload);
+    } catch (error) {
+      sendJson(response, 502, {
+        ok: false,
+        error: `No se pudo parsear spark_batch_comments_from_aws.sh: ${error.message}`,
+        stdout,
+        stderr
+      });
+    }
+  });
+}
+
 function runLiveDelta(response, requestUrl) {
   if (!awsStarted) {
     sendJson(response, 409, {
@@ -377,6 +447,25 @@ function sendJson(response, status, payload) {
     "Cache-Control": "no-store"
   });
   response.end(JSON.stringify(payload));
+}
+
+function writeRuntimeJson(fileName, payload) {
+  fs.mkdirSync(runtimeDir, { recursive: true });
+  fs.writeFileSync(path.join(runtimeDir, fileName), JSON.stringify(payload, null, 2));
+}
+
+function clearRuntimeCache() {
+  try {
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    for (const fileName of fs.readdirSync(runtimeDir)) {
+      if (fileName === ".gitkeep") continue;
+      if (fileName.endsWith(".json")) {
+        fs.unlinkSync(path.join(runtimeDir, fileName));
+      }
+    }
+  } catch {
+    // Runtime cache is optional; streaming should still start if cleanup fails.
+  }
 }
 
 server.listen(port, host, () => {

@@ -48,29 +48,6 @@
         </article>
       </header>
 
-      <section class="pipeline-map" aria-label="Mapa de arquitectura">
-        <article class="pipeline-node raw">
-          <span>S3 Raw</span>
-          <strong>youtube_lake.csv</strong>
-        </article>
-        <article class="pipeline-node producer">
-          <span>Producer</span>
-          <strong>simula streaming</strong>
-        </article>
-        <article class="pipeline-node kafka">
-          <span>Kafka</span>
-          <strong>raw_youtube_chat</strong>
-        </article>
-        <article class="pipeline-node flink">
-          <span>Flink</span>
-          <strong>senales + alertas</strong>
-        </article>
-        <article class="pipeline-node spark">
-          <span>Spark</span>
-          <strong>curated batch</strong>
-        </article>
-      </section>
-
       <section class="metric-board" aria-label="Metricas principales">
         <article class="metric-card">
           <span class="metric-label">Muestra validada</span>
@@ -146,16 +123,6 @@
           </div>
           <div class="alert-stack" id="alert-stack"></div>
         </article>
-
-        <article class="panel spark-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="panel-kicker">Spark Batch</p>
-              <h2>Dataset curado desde Kafka</h2>
-            </div>
-          </div>
-          <div class="spark-grid" id="spark-grid"></div>
-        </article>
       </section>
 
       <section class="panel spark-batch-panel" aria-label="Spark batch enrichment">
@@ -167,7 +134,24 @@
           <span class="live-badge" id="spark-batch-status">en espera</span>
         </div>
         <div class="spark-batch-summary" id="spark-batch-summary"></div>
-        <div class="spark-batch-grid" id="spark-batch-grid"></div>
+        <div class="spark-batch-workspace">
+          <div class="spark-batch-grid" id="spark-batch-grid"></div>
+          <aside class="spark-comments-panel" aria-label="Comentarios ofensivos Spark">
+            <div class="panel-heading compact">
+              <div>
+                <p class="panel-kicker">spark ml filtered</p>
+                <h2>Comentarios ofensivos</h2>
+              </div>
+              <span class="live-badge"><strong id="spark-comments-count">0</strong> rows</span>
+            </div>
+            <label class="search-box spark-search">
+              <span>Filtrar comentarios del batch</span>
+              <input id="spark-comments-search" type="search" placeholder="Usuario, texto, categoria..." autocomplete="off" />
+            </label>
+            <p class="spark-comments-hint" id="spark-comments-hint">Selecciona un batch completo para cargar sus comentarios filtrados.</p>
+            <div class="live-chat-list spark-comments-list" id="spark-comments-list" aria-live="polite"></div>
+          </aside>
+        </div>
       </section>
 
     </main>

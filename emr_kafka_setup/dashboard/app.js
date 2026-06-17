@@ -62,6 +62,10 @@ let state = {
     batches: {},
     latest_batch_id: ""
   },
+  selectedSparkBatchId: "",
+  sparkComments: [],
+  sparkCommentsQuery: "",
+  sparkCommentsLoading: false,
   sparkStartInFlight: false,
   sparkStartingTargets: new Set(),
   chartHover: null,
@@ -94,10 +98,13 @@ const selectors = {
   filteredCount: document.querySelector("#filtered-count"),
   actorBars: document.querySelector("#actor-bars"),
   alertStack: document.querySelector("#alert-stack"),
-  sparkGrid: document.querySelector("#spark-grid"),
   sparkBatchStatus: document.querySelector("#spark-batch-status"),
   sparkBatchSummary: document.querySelector("#spark-batch-summary"),
   sparkBatchGrid: document.querySelector("#spark-batch-grid"),
+  sparkCommentsCount: document.querySelector("#spark-comments-count"),
+  sparkCommentsSearch: document.querySelector("#spark-comments-search"),
+  sparkCommentsHint: document.querySelector("#spark-comments-hint"),
+  sparkCommentsList: document.querySelector("#spark-comments-list"),
   timelineChart: document.querySelector("#timeline-chart"),
   searchInput: document.querySelector("#search-input"),
   filterButtons: document.querySelectorAll(".filter-button"),
@@ -233,10 +240,73 @@ async function fetchSparkStatus() {
       batches: status.batches || {},
       latest_batch_id: status.latest_batch_id || ""
     };
+    const selected = state.selectedSparkBatchId ? state.sparkBatch.batches[state.selectedSparkBatchId] : null;
+    if (selected && selected.status !== "done") {
+      state.selectedSparkBatchId = "";
+      state.sparkComments = [];
+    }
     updateSparkMetricFromBatches();
     renderSparkBatch();
   } catch {
     if (selectors.sparkBatchStatus) selectors.sparkBatchStatus.textContent = "spark status error";
+  }
+}
+
+async function fetchSparkComments(batchId) {
+  const batch = state.sparkBatch.batches?.[batchId];
+  if (!state.awsConnected || !batch || batch.status !== "done") return;
+
+  state.selectedSparkBatchId = batchId;
+  state.sparkCommentsLoading = true;
+  renderSparkComments();
+
+  try {
+    const params = new URLSearchParams({ batchId, limit: "300" });
+    const response = await fetch(`/api/spark/comments?${params.toString()}`, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "No se pudieron cargar comentarios Spark");
+    state.sparkComments = result.comments || [];
+    if (selectors.sparkCommentsHint) {
+      selectors.sparkCommentsHint.textContent = `${batchId}: ${state.sparkComments.length} comentarios ofensivos filtrados por Spark ML.`;
+    }
+  } catch (error) {
+    state.sparkComments = [];
+    if (selectors.sparkCommentsHint) selectors.sparkCommentsHint.textContent = `${batchId}: ${error.message}`;
+  } finally {
+    state.sparkCommentsLoading = false;
+    renderSparkBatch();
+    renderSparkComments();
+  }
+}
+
+async function restoreAwsSessionIfRunning() {
+  try {
+    const response = await fetch("/api/aws/status", { cache: "no-store" });
+    const status = await response.json();
+    if (!response.ok || !status.ok) {
+      throw new Error(status.error || "AWS aun no esta conectado.");
+    }
+
+    state.awsConnected = true;
+    state.awsStatus = status;
+    state.dataSize = Number(status.data_size || state.dataSize || 0);
+    state.sparkBatchSize = Number(status.spark_batch_size || state.sparkBatchSize || 1000);
+    state.snapshot.data_mode = "aws_streaming";
+    selectors.syncAws.disabled = true;
+    selectors.syncAws.textContent = "Conectado";
+    if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka activo";
+    setSyncStatus("AWS ya estaba conectado. Reanudando streaming desde Kafka.", "ok");
+    startPolling();
+    fetchLiveDelta();
+    fetchAwsStatus();
+    fetchSparkStatus();
+  } catch {
+    state.awsConnected = false;
+    selectors.syncAws.disabled = false;
+    selectors.syncAws.textContent = "Conectar AWS";
+    if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
+    state.snapshot.data_mode = "disconnected";
+    setSyncStatus("Frontend listo. AWS aun no se ha iniciado.", "ok");
   }
 }
 
@@ -365,11 +435,17 @@ function resetStreamingState() {
   state.sessionCounts = { ...state.snapshot.counts };
   state.awsStatus = null;
   state.sparkBatch = { batches: {}, latest_batch_id: "" };
+  state.selectedSparkBatchId = "";
+  state.sparkComments = [];
+  state.sparkCommentsQuery = "";
+  state.sparkCommentsLoading = false;
   state.sparkStartInFlight = false;
   state.sparkStartingTargets = new Set();
   if (selectors.streamList) selectors.streamList.innerHTML = "";
   if (selectors.rawChatList) selectors.rawChatList.innerHTML = "";
   if (selectors.filteredList) selectors.filteredList.innerHTML = "";
+  if (selectors.sparkCommentsList) selectors.sparkCommentsList.innerHTML = "";
+  if (selectors.sparkCommentsSearch) selectors.sparkCommentsSearch.value = "";
   if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
   renderAll();
 }
@@ -506,7 +582,6 @@ function streamItemHtml(event) {
         <p>${escapeHtml(eventText(event))}</p>
         <div class="stream-tags">${tags}</div>
       </div>
-      <span class="offset-pill">p${escapeHtml(String(event.source_partition ?? "-"))} / o${escapeHtml(String(event.source_offset ?? "-"))}</span>
     </article>
   `;
 }
@@ -562,7 +637,7 @@ function appendStreamEvents(events) {
 }
 
 function filteredName(event) {
-  return event.payload?.actor || event.payload?.author || event.author || event.raw?.author || event.payload?.alert_type || event.event_type || "mensaje_filtrado";
+  return event.payload?.author || event.author || event.raw?.author || event.payload?.actor || event.payload?.alert_type || event.event_type || "youtube_user";
 }
 
 function categoryText(event) {
@@ -582,7 +657,6 @@ function chatItemHtml(event, mode = "raw") {
         ${mode === "filtered" ? `<p class="category-line">Categoria: ${escapeHtml(categoryText(event))}</p>` : ""}
         <div class="stream-tags">${tags}</div>
       </div>
-      <span class="offset-pill">p${escapeHtml(String(event.source_partition ?? "-"))} / o${escapeHtml(String(event.source_offset ?? "-"))}</span>
     </article>
   `;
 }
@@ -808,6 +882,7 @@ function alertItemHtml(alert) {
 
 // ── SPARK ─────────────────────────────────────────────────────────────────
 function renderSpark() {
+  if (!selectors.sparkGrid) return;
   const jobs = state.snapshot.spark_jobs || [];
   selectors.sparkGrid.innerHTML = jobs
     .map(
@@ -832,6 +907,28 @@ function sortedSparkBatches() {
     .sort((a, b) => Number(a.target_count || 0) - Number(b.target_count || 0));
 }
 
+function expectedSparkBatches() {
+  const actual = state.sparkBatch.batches || {};
+  const batchSize = Number(state.sparkBatchSize || 1000);
+  const eligible = Number(state.awsStatus?.eligible_spark_target || 0);
+  const maxTarget = Math.max(eligible, ...Object.values(actual).map((batch) => Number(batch.target_count || 0)), 0);
+  const batches = [];
+  for (let target = batchSize; target <= maxTarget; target += batchSize) {
+    const id = sparkBatchId(target);
+    batches.push(actual[id] || {
+      batch_id: id,
+      target_count: target,
+      status: "pending",
+      current_job: "pending",
+      message: "Esperando turno de ejecucion Spark",
+      rows: 0,
+      jobs: {},
+      outputs: {}
+    });
+  }
+  return batches;
+}
+
 function updateSparkMetricFromBatches() {
   const completed = sortedSparkBatches().filter((batch) => batch.status === "done");
   const maxCompleted = completed.reduce((max, batch) => Math.max(max, Number(batch.target_count || batch.rows || 0)), 0);
@@ -843,9 +940,12 @@ function updateSparkMetricFromBatches() {
 function renderSparkBatch() {
   if (!selectors.sparkBatchSummary || !selectors.sparkBatchGrid || !selectors.sparkBatchStatus) return;
 
-  const batches = sortedSparkBatches();
+  const actualBatches = sortedSparkBatches();
+  const batches = expectedSparkBatches();
   const latest = batches[batches.length - 1];
-  const rawSeen = state.snapshot.counts?.raw_youtube_chat || 0;
+  const rawSeen = state.awsStatus?.counts?.raw_youtube_chat?.total
+    ?? state.snapshot.counts?.raw_youtube_chat
+    ?? 0;
   const dataSize = state.dataSize || "DATA_SIZE";
   const batchSize = state.sparkBatchSize || 1000;
   const eligible = state.awsStatus?.eligible_spark_target || 0;
@@ -853,8 +953,8 @@ function renderSparkBatch() {
   const running = batches.find((batch) => batch.status === "running" || batch.status === "queued");
   const statusText = running
     ? `${running.batch_id}: ${running.current_job || "running"}`
-    : latest
-      ? `${latest.batch_id}: ${latest.status}`
+    : actualBatches.length
+      ? `${actualBatches[actualBatches.length - 1].batch_id}: ${actualBatches[actualBatches.length - 1].status}`
       : "en espera";
 
   selectors.sparkBatchStatus.textContent = statusText;
@@ -883,8 +983,11 @@ function renderSparkBatch() {
         })
         .join("");
       const outputs = batch.outputs || {};
+      const isDone = batch.status === "done";
+      const selectedClass = state.selectedSparkBatchId === batch.batch_id ? "selected" : "";
+      const title = isDone ? "Abrir comentarios ofensivos filtrados por Spark" : "Disponible cuando el batch termine";
       return `
-        <article class="spark-card ${escapeHtml(batch.status || "queued")}">
+        <article class="spark-card ${escapeHtml(batch.status || "queued")} ${selectedClass}" data-batch-id="${escapeHtml(batch.batch_id || "")}" data-clickable="${isDone ? "true" : "false"}" title="${escapeHtml(title)}">
           <strong>${escapeHtml(batch.batch_id || "batch")} · ${escapeHtml(batch.status || "queued")}</strong>
           <p>Target ${escapeHtml(String(batch.target_count || 0))} · rows ${escapeHtml(String(batch.rows || 0))}</p>
           <p>${escapeHtml(batch.message || batch.current_job || "Esperando ejecucion")}</p>
@@ -894,6 +997,58 @@ function renderSparkBatch() {
       `;
     })
     .join("");
+}
+
+function sparkCommentMatchesQuery(comment) {
+  const query = state.sparkCommentsQuery.trim().toLowerCase();
+  if (!query) return true;
+  return [
+    comment.author,
+    comment.message,
+    comment.binary_label,
+    comment.multiclass_label,
+    comment.risk_level,
+    comment.risk_reason,
+    comment.local_rule_tags
+  ].join(" ").toLowerCase().includes(query);
+}
+
+function sparkCommentTags(comment) {
+  return [
+    comment.risk_level,
+    comment.binary_label,
+    comment.multiclass_label,
+    ...(String(comment.local_rule_tags || "").split("|"))
+  ].filter(Boolean).slice(0, 5);
+}
+
+function sparkCommentHtml(comment) {
+  const tags = sparkCommentTags(comment).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("");
+  const confidence = Number(comment.confidence || 0);
+  return `
+    <article class="stream-item spark">
+      <div class="stream-copy">
+        <strong>${escapeHtml(comment.author || "youtube_user")}</strong>
+        <p>${escapeHtml(comment.message || "")}</p>
+        <p class="category-line">Categoria: ${escapeHtml(comment.multiclass_label || comment.binary_label || "ofensivo")} · confianza ${(confidence * 100).toFixed(1)}%</p>
+        <div class="stream-tags">${tags}</div>
+      </div>
+    </article>
+  `;
+}
+
+function renderSparkComments() {
+  if (!selectors.sparkCommentsList) return;
+  if (state.sparkCommentsLoading) {
+    selectors.sparkCommentsList.innerHTML = '<p class="stream-empty">Cargando comentarios Spark desde S3...</p>';
+    return;
+  }
+
+  const visible = state.sparkComments.filter(sparkCommentMatchesQuery);
+  selectors.sparkCommentsList.innerHTML = visible.length
+    ? visible.map(sparkCommentHtml).join("")
+    : '<p class="stream-empty">No hay comentarios ofensivos para este filtro.</p>';
+  if (selectors.sparkCommentsCount) animateCount(selectors.sparkCommentsCount, visible.length);
 }
 
 function drawTimeline() {
@@ -1091,6 +1246,13 @@ function bindEvents() {
     }
   });
 
+  if (selectors.sparkCommentsSearch) {
+    selectors.sparkCommentsSearch.addEventListener("input", (event) => {
+      state.sparkCommentsQuery = event.target.value;
+      renderSparkComments();
+    });
+  }
+
   selectors.playStream.addEventListener("click", () => {
     state.playing = !state.playing;
     selectors.playStream.textContent = state.playing ? "Pausar cinta" : "Reanudar cinta";
@@ -1102,6 +1264,14 @@ function bindEvents() {
   });
 
   selectors.syncAws.addEventListener("click", requestAwsSync);
+
+  if (selectors.sparkBatchGrid) {
+    selectors.sparkBatchGrid.addEventListener("click", (event) => {
+      const card = event.target.closest(".spark-card[data-batch-id]");
+      if (!card || card.dataset.clickable !== "true") return;
+      fetchSparkComments(card.dataset.batchId);
+    });
+  }
 
   if (selectors.timelineChart) {
     selectors.timelineChart.addEventListener("mousemove", (event) => {
@@ -1129,6 +1299,7 @@ function renderAll() {
   renderAlerts();
   renderSpark();
   renderSparkBatch();
+  renderSparkComments();
   drawTimeline();
   renderStream({ reset: true });
   renderFilteredMessages();
@@ -1139,8 +1310,7 @@ async function init() {
   resetStreamingState();
   renderAll();
   bindEvents();
-  selectors.syncAws.textContent = "Conectar AWS";
-  setSyncStatus("Frontend listo. AWS aun no se ha iniciado.", "ok");
+  await restoreAwsSessionIfRunning();
 }
 
 init();

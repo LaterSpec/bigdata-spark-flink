@@ -131,9 +131,18 @@ for pattern in \
   "flink_job2_window_metrics.sh" \
   "flink_job3_political_signals.sh" \
   "flink_job4_actor_polarization.sh" \
-  "flink_job5_risk_alerts.sh"; do
-  pkill -f "\$pattern" >/dev/null 2>&1 || true
+  "flink_job5_risk_alerts.sh" \
+  "spark_batches/run_" \
+  "spark_read_kafka_raw_youtube.py" \
+  "spark_rules_from_kafka_parquet.py" \
+  "spark_apply_offendes_from_kafka_parquet.py" \
+  "spark_hybrid_scoring_from_kafka.py" \
+  "spark_comment_extract" \
+  "spark-submit"; do
+  pkill -9 -f "\$pattern" >/dev/null 2>&1 || true
 done
+# Da tiempo a que los traps de los batches zombie escriban su estado final
+sleep 3
 
 if [[ -f "\$PROJECT_HOME/flink/FlinkKafkaStreamingJobs.java" && ! -f "\$PROJECT_HOME/flink/jobs/FlinkKafkaStreamingJobs.java" ]]; then
   cp "\$PROJECT_HOME/flink/FlinkKafkaStreamingJobs.java" "\$PROJECT_HOME/flink/jobs/FlinkKafkaStreamingJobs.java"
@@ -155,6 +164,9 @@ if [[ "\$RESET_TOPICS" == "1" ]]; then
     "\$KAFKA_HOME/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --delete --topic "\$topic" >/dev/null 2>&1 || true
   done
   sleep 5
+  echo "Reseteando estado de Spark batch para eliminar batches fantasma de sesiones previas"
+  rm -f "\$PROJECT_HOME/logs/spark_batch_status.json" >/dev/null 2>&1 || true
+  rm -rf "\$PROJECT_HOME/logs/spark_batches" >/dev/null 2>&1 || true
 fi
 "\$PROJECT_HOME/scripts/create_topics.sh"
 "\$PROJECT_HOME/scripts/status_kafka.sh" || true
@@ -199,3 +211,10 @@ nohup python3 "\$PROJECT_HOME/producers/produce_youtube_chat_from_s3.py" \
 echo "EMR listo para streaming."
 echo "Dashboard: ejecuta en tu Mac ./start_dashboard.sh y pulsa Conectar AWS."
 EOF
+
+scp -i "$PemPath" -o StrictHostKeyChecking=no \
+  "$ProjectRoot/emr_kafka_setup/spark/jobs/spark_read_kafka_raw_youtube.py" \
+  "$ProjectRoot/emr_kafka_setup/spark/jobs/spark_rules_from_kafka_parquet.py" \
+  "$ProjectRoot/emr_kafka_setup/spark/jobs/spark_apply_offendes_from_kafka_parquet.py" \
+  "$ProjectRoot/emr_kafka_setup/spark/jobs/spark_hybrid_scoring_from_kafka.py" \
+  "${UserName}@${HostName}:/home/hadoop/bigdata-kafka/spark/jobs/" >/dev/null

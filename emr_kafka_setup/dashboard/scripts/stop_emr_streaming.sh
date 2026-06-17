@@ -66,11 +66,14 @@ for pattern in \
   "flink_job3_political_signals.sh" \
   "flink_job4_actor_polarization.sh" \
   "flink_job5_risk_alerts.sh" \
+  "spark_batches/run_" \
   "spark_read_kafka_raw_youtube.py" \
   "spark_rules_from_kafka_parquet.py" \
   "spark_apply_offendes_from_kafka_parquet.py" \
-  "spark_hybrid_scoring_from_kafka.py"; do
-  pkill -f "$pattern" >/dev/null 2>&1 || true
+  "spark_hybrid_scoring_from_kafka.py" \
+  "spark_comment_extract" \
+  "spark-submit"; do
+  pkill -9 -f "$pattern" >/dev/null 2>&1 || true
 done
 
 if [[ -x "$KAFKA_HOME/bin/kafka-server-stop.sh" ]]; then
@@ -78,8 +81,10 @@ if [[ -x "$KAFKA_HOME/bin/kafka-server-stop.sh" ]]; then
 fi
 
 pkill -f "kafka.Kafka" >/dev/null 2>&1 || true
+# Espera a que los traps de los batches escriban su estado final antes de borrarlo
+sleep 3
 rm -f "$PROJECT_HOME/logs/spark_batch_status.json" >/dev/null 2>&1 || true
-rm -rf "$PROJECT_HOME/logs/spark_batches"/*.lock >/dev/null 2>&1 || true
+rm -rf "$PROJECT_HOME/logs/spark_batches" >/dev/null 2>&1 || true
 
 echo "Streaming EMR detenido."
 EOF
