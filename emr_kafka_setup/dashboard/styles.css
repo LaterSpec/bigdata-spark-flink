@@ -944,6 +944,262 @@ h2 {
   }
 }
 
+/* ── DISTRIBUTED HEALTH DECK ── */
+.health-deck {
+  position: relative;
+  margin-top: 18px;
+  overflow: hidden;
+  background:
+    linear-gradient(120deg, rgba(49, 209, 139, 0.07), transparent 42%),
+    linear-gradient(145deg, rgba(12, 35, 30, 0.96), rgba(6, 19, 16, 0.9));
+}
+
+.health-deck::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.34;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent calc(12.5% - 1px),
+    rgba(240, 200, 107, 0.08) calc(12.5% - 1px),
+    rgba(240, 200, 107, 0.08) 12.5%
+  );
+}
+
+.health-heading,
+.health-flow,
+.health-console-grid,
+.health-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.health-heading-status {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-items: end;
+  gap: 4px 8px;
+}
+
+.health-heading-status small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.68rem;
+}
+
+.health-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 5px rgba(168, 189, 176, 0.08);
+}
+
+.health-pulse.healthy {
+  background: var(--leaf);
+  box-shadow: 0 0 0 5px rgba(49, 209, 139, 0.12), 0 0 22px rgba(49, 209, 139, 0.7);
+  animation: healthPulse 1.8s ease-out infinite;
+}
+
+.health-pulse.degraded,
+.health-pulse.offline {
+  background: var(--rocoto);
+  box-shadow: 0 0 0 5px rgba(255, 90, 61, 0.12);
+}
+
+.health-flow {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) 42px minmax(130px, 1fr) 42px minmax(230px, 1.7fr) 42px minmax(110px, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid rgba(105, 185, 255, 0.17);
+  border-radius: var(--radius-lg);
+  background: rgba(4, 16, 13, 0.58);
+}
+
+.health-flow > i {
+  position: relative;
+  height: 1px;
+  overflow: visible;
+  background: linear-gradient(90deg, var(--leaf-dim), var(--sky-s3));
+}
+
+.health-flow > i::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -1px;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid var(--sky-s3);
+  border-right: 1px solid var(--sky-s3);
+  transform: rotate(45deg);
+}
+
+.health-flow-node {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.health-flow-node span {
+  color: var(--cancha);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.health-flow-node strong {
+  font-family: "Bahnschrift", "Aptos Display", sans-serif;
+  font-size: 0.94rem;
+}
+
+.health-flow-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.health-flow-split .health-flow-node {
+  padding: 10px;
+  border-left: 2px solid var(--leaf);
+  background: rgba(49, 209, 139, 0.055);
+}
+
+.health-console-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.25fr 1fr;
+  gap: 12px;
+}
+
+.health-console {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(240, 200, 107, 0.14);
+  border-radius: var(--radius-md);
+  background: rgba(6, 20, 16, 0.72);
+}
+
+.health-console-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.health-console-title span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.health-console-title strong {
+  color: var(--cancha);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.78rem;
+}
+
+.broker-rack,
+.topic-health-list,
+.worker-health-list {
+  display: grid;
+  gap: 8px;
+}
+
+.broker-node,
+.topic-health-row,
+.worker-health-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(168, 189, 176, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.broker-node {
+  grid-template-columns: 9px 1fr auto;
+}
+
+.broker-node::before,
+.health-state-dot {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--leaf);
+}
+
+.broker-node.offline::before,
+.health-state-dot.offline {
+  background: var(--rocoto);
+}
+
+.broker-node span,
+.topic-health-row span,
+.worker-health-row span {
+  overflow: hidden;
+  color: var(--text);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.broker-node small,
+.topic-health-row small,
+.worker-health-row small {
+  color: var(--muted);
+  font-size: 0.67rem;
+}
+
+.topic-health-row {
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+}
+
+.topic-rate {
+  color: var(--leaf) !important;
+}
+
+.worker-health-row {
+  grid-template-columns: 9px minmax(110px, 1fr) auto;
+}
+
+.health-actions {
+  margin-top: 12px;
+  padding: 11px 14px;
+  border-left: 2px solid var(--cancha);
+  color: var(--muted);
+  background: rgba(240, 200, 107, 0.055);
+  font-size: 0.78rem;
+}
+
+.health-actions.healthy {
+  border-color: var(--leaf);
+  color: var(--leaf);
+  background: rgba(49, 209, 139, 0.055);
+}
+
+@keyframes healthPulse {
+  70% {
+    box-shadow: 0 0 0 12px rgba(49, 209, 139, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(49, 209, 139, 0);
+  }
+}
+
 /* ── RESPONSIVE ── */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -967,6 +1223,14 @@ h2 {
   .chart-panel {
     grid-column: 1 / -1;
   }
+
+  .health-console-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .health-console:last-child {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 1040px) {
@@ -987,6 +1251,14 @@ h2 {
   }
 
   .chart-panel {
+    grid-column: 1 / -1;
+  }
+
+  .health-flow {
+    grid-template-columns: 1fr 24px 1fr;
+  }
+
+  .health-flow-split {
     grid-column: 1 / -1;
   }
 }
@@ -1034,5 +1306,34 @@ h2 {
 
   .kafka-counts {
     display: none;
+  }
+
+  .health-console-grid,
+  .health-flow,
+  .health-flow-split {
+    grid-template-columns: 1fr;
+  }
+
+  .health-console:last-child,
+  .health-flow-split {
+    grid-column: auto;
+  }
+
+  .health-flow > i {
+    width: 1px;
+    height: 18px;
+    margin-left: 14px;
+    background: linear-gradient(var(--leaf-dim), var(--sky-s3));
+  }
+
+  .health-flow > i::after {
+    top: auto;
+    right: -3px;
+    bottom: 0;
+    transform: rotate(135deg);
+  }
+
+  .health-heading-status {
+    justify-items: start;
   }
 }

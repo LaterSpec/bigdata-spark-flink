@@ -1,12 +1,16 @@
 # Spark Kafka consumer report - Proyecto Big Data
 
+> Documento histórico de la primera validación Kafka→Spark. La ejecución vigente usa rangos `batch_XXXXXXX`, validación exacta de filas e idempotencia, descritos en `spark_batch_from_kafka_full_report.md`.
+
+> **Evidencia histórica con runtime actualizado:** se conservan los valores de la prueba de 105 registros. Actualmente Spark se ejecuta en `EMR_WORKERS`, consume el Kafka distribuido de `EMR_PRIMARY` y limita cada batch mediante `--min-row-number` y `--max-row-number`.
+
 ## Resumen
 
 - Fecha de validacion: 2026-06-17 01:18:25 UTC
-- Nodo master EMR: ip-172-31-14-56.ec2.internal
+- Nodo de la prueba histórica: ip-172-31-14-56.ec2.internal
 - Spark: 3.4.1-amzn-2
 - Scala: 2.12.15
-- Kafka: 3.6.2 self-managed en master EMR
+- Kafka de la prueba histórica: 3.6.2 single-node
 - Conector usado: org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1
 - Topic leido: raw_youtube_chat
 - Bootstrap usado por Spark distribuido: ip-172-31-14-56.ec2.internal:9092
@@ -15,9 +19,9 @@
 
 ## Objetivo validado
 
-Esta prueba alinea la arquitectura del proyecto como:
+Esta prueba validó la rama Spark. La arquitectura completa vigente es:
 
-S3 -> Python Producer -> Kafka -> Spark Batch -> S3 Curated
+S3 -> Producer en EMR_PRIMARY -> Kafka KRaft -> Flink y Spark en EMR_WORKERS -> Kafka Results / S3 Curated
 
 Spark ya puede consumir mensajes JSON desde Kafka y persistirlos como dataset Parquet en S3. Este job queda como base para conectar reglas peruanas, modelo OffendES Spark ML, scoring hibrido y agregados historicos.
 
@@ -166,12 +170,12 @@ VALIDATION_SAMPLE_END
 
 ## Limitaciones y decisiones tecnicas
 
-- Kafka esta instalado en el master EMR por restricciones academicas de AWS Academy Learner Lab; no es una arquitectura productiva.
+- Durante esta prueba histórica Kafka estaba instalado en un único master. El runtime vigente usa los tres nodos de `EMR_PRIMARY`.
 - Spark en YARN debe usar `ip-172-31-14-56.ec2.internal:9092`, porque `localhost:9092` solo apunta al broker cuando el proceso corre en el master.
 - Se usaron los 105 mensajes ya existentes en Kafka; no se ejecuto la carga completa de 160,464 comentarios.
 - El output de esta prueba se escribe con modo `overwrite` solo sobre el prefijo de prueba `output/kafka_to_spark/raw_youtube_chat_test/`.
 - El job conserva `json_value` y `raw` para trazabilidad, ademas de columnas curadas.
 
-## Proximo paso
+## Estado posterior
 
-Conectar este dataset Kafka->Spark con los jobs existentes de reglas locales, OffendES Spark ML y scoring hibrido. Luego, implementar Flink Streaming como consumidor de `raw_youtube_chat` para la parte de baja latencia.
+La conexión con reglas, OffendES, scoring híbrido y Flink Streaming ya está implementada en la arquitectura distribuida vigente.

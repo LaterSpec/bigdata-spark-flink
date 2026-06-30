@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("--s3-path", required=True)
     parser.add_argument("--bootstrap-server", default="localhost:9092")
     parser.add_argument("--topic", default="raw_youtube_chat")
+    parser.add_argument("--start-row", type=int, default=1, help="First CSV data row to publish (1-based)")
     parser.add_argument("--limit", type=int, default=0, help="0 means no limit")
     parser.add_argument("--delay-ms", type=int, default=0)
     parser.add_argument("--log-every", type=int, default=25)
@@ -106,6 +107,8 @@ def clean_row(row):
 
 def main():
     args = parse_args()
+    if args.start_row < 1:
+        raise ValueError("--start-row must be >= 1")
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
@@ -133,6 +136,8 @@ def main():
 
     try:
         for row_number, raw_row in enumerate(reader, start=1):
+            if row_number < args.start_row:
+                continue
             if args.limit and sent >= args.limit:
                 break
 

@@ -1,8 +1,10 @@
 # Plan Spark Batch - Baseline Local a EMR
 
+> **Registro histórico:** el runtime vigente usa batches disjuntos y concurrentes desde Kafka sobre `EMR_WORKERS`. Consulta `architecture.md`; los objetivos y resultados originales de esta fase se conservan.
+
 Este documento define el plan que llevo el baseline local NLP + reglas peruanas a un flujo Spark Batch en EMR. Se conserva como record historico de una fase ya completada. No implementa ni ejecuta Kafka/Flink.
 
-Para la nueva arquitectura objetivo y la siguiente expansion en AWS, ver `architecture.md`.
+Para la arquitectura distribuida vigente, ver `architecture.md`.
 
 ## Objetivo del job Spark Batch
 

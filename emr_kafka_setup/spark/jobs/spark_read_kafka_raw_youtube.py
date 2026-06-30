@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("--output-path", required=True)
     parser.add_argument("--report-path", default="")
     parser.add_argument("--coalesce", type=int, default=1)
+    parser.add_argument("--min-row-number", type=int, default=0)
     parser.add_argument("--max-row-number", type=int, default=0)
     return parser.parse_args()
 
@@ -133,8 +134,11 @@ def main():
         "json_value",
         "raw",
     )
+    row_number = F.col("row_number").cast("long")
+    if args.min_row_number > 0:
+        output_df = output_df.filter(row_number >= F.lit(args.min_row_number))
     if args.max_row_number > 0:
-        output_df = output_df.filter(F.col("row_number").cast("long") <= F.lit(args.max_row_number))
+        output_df = output_df.filter(row_number <= F.lit(args.max_row_number))
 
     writer_df = output_df.coalesce(args.coalesce) if args.coalesce > 0 else output_df
     writer_df.write.mode("overwrite").parquet(args.output_path)

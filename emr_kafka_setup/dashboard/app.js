@@ -6,6 +6,7 @@ function emptyStreamingSnapshot() {
     counts: {
       raw_youtube_chat: 0,
       nlp_stream_results: 0,
+      flink_output_total: 0,
       alerts_polarization: 0,
       filtered_messages: 0,
       spark_curated_rows: 0,
@@ -30,6 +31,8 @@ let state = {
   pollingHandle: null,
   statusPollingHandle: null,
   sparkPollingHandle: null,
+  healthPollingHandle: null,
+  startupPollingHandle: null,
   pointer: 0,
   // Ring buffer: emitted events in chat order. Filters are applied at render time.
   masterQueue: [],
@@ -50,6 +53,7 @@ let state = {
   sessionCounts: {
     raw_youtube_chat: 0,
     nlp_stream_results: 0,
+    flink_output_total: 0,
     alerts_polarization: 0,
     filtered_messages: 0,
     spark_curated_rows: 0,
@@ -57,17 +61,30 @@ let state = {
   },
   dataSize: 0,
   sparkBatchSize: 1000,
+  sparkMaxConcurrency: 1,
+  needsResume: false,
+  resumeInFlight: false,
+  startupInProgress: false,
+  startupStatusInFlight: false,
+  startupKafkaProbeInFlight: false,
+  startupKafkaProbePromise: null,
+  awsStatusInFlight: false,
+  sparkStatusInFlight: false,
+  healthInFlight: false,
   awsStatus: null,
+  pipelineHealth: null,
   sparkBatch: {
     batches: {},
     latest_batch_id: ""
   },
+  sparkStatusLoaded: false,
   selectedSparkBatchId: "",
   sparkComments: [],
   sparkCommentsQuery: "",
   sparkCommentsLoading: false,
   sparkStartInFlight: false,
   sparkStartingTargets: new Set(),
+  sessionGeneration: 0,
   chartHover: null,
   chartAnimation: null,
   chartHeadProgress: 1
@@ -113,16 +130,36 @@ const selectors = {
   syncAws: document.querySelector("#sync-aws"),
   syncStatus: document.querySelector("#sync-status"),
   dataMode: document.querySelector("#data-mode"),
-  kafkaLabel: document.querySelector(".kafka-label")
+  kafkaLabel: document.querySelector(".kafka-label"),
+  healthPulse: document.querySelector("#health-pulse"),
+  healthStatus: document.querySelector("#health-status"),
+  healthUpdated: document.querySelector("#health-updated"),
+  healthQuorumSummary: document.querySelector("#health-quorum-summary"),
+  healthBrokers: document.querySelector("#health-brokers"),
+  healthLagSummary: document.querySelector("#health-lag-summary"),
+  healthTopics: document.querySelector("#health-topics"),
+  healthWorkersSummary: document.querySelector("#health-workers-summary"),
+  healthWorkers: document.querySelector("#health-workers"),
+  healthActions: document.querySelector("#health-actions")
 };
 
 // ── AWS STREAM START ──────────────────────────────────────────────────────
 async function requestAwsSync() {
-  if (state.awsConnected) return;
+  const isResume = state.needsResume;
+  if ((state.awsConnected && !isResume) || state.startupInProgress) return;
+  if (state.resumeInFlight) return;
+  if (!isResume) resetStreamingState();
+  state.resumeInFlight = true;
+  state.startupInProgress = true;
   selectors.syncAws.disabled = true;
-  selectors.syncAws.textContent = "Conectando...";
-  resetStreamingState();
-  setSyncStatus("Iniciando Kafka, producer y jobs Flink en EMR...", "ok");
+  selectors.refreshDemo.disabled = false;
+  selectors.syncAws.textContent = isResume ? "Reanudando..." : "Conectando...";
+  setSyncStatus(
+    isResume
+      ? "Reanudando el producer en EMR_PRIMARY desde la fila pendiente..."
+      : "Iniciando Kafka en EMR_PRIMARY y compute en EMR_WORKERS...",
+    "ok"
+  );
 
   try {
     const response = await fetch("/api/aws/start", { method: "POST" });
@@ -130,34 +167,56 @@ async function requestAwsSync() {
     if (!response.ok || !result.ok) {
       throw new Error(result.error || "No se pudo iniciar AWS");
     }
-    state.awsConnected = true;
     state.dataSize = Number(result.data_size || state.dataSize || 0);
     state.sparkBatchSize = Number(result.spark_batch_size || state.sparkBatchSize || 1000);
-    state.snapshot.data_mode = "aws_streaming";
-    selectors.syncAws.textContent = "Conectado";
-    if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka activo";
-    setSyncStatus("AWS conectado. Recibiendo deltas desde Kafka cada 3 segundos.", "ok");
-    startPolling();
-    fetchLiveDelta();
-    fetchAwsStatus();
-    fetchSparkStatus();
+    state.sparkMaxConcurrency = Math.max(1, Number(result.spark_max_concurrency || state.sparkMaxConcurrency || 1));
+    selectors.syncAws.textContent = isResume ? "Reanudando..." : "Inicializando...";
+    setSyncStatus(result.message || "Arranque aceptado. Verificando Kafka en segundo plano...", "ok");
+    startAwsStartupPolling();
+    pollAwsStartup();
   } catch (error) {
-    state.awsConnected = false;
-    selectors.syncAws.disabled = false;
-    selectors.syncAws.textContent = "Conectar AWS";
-    if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
-    state.snapshot.data_mode = "disconnected";
-    renderCounts();
-    setSyncStatus(`AWS no disponible: ${error.message}. El dashboard queda vacio, sin fallback local.`, "error");
+    state.startupInProgress = false;
+    if (isResume) {
+      state.awsConnected = true;
+      state.needsResume = true;
+      selectors.syncAws.disabled = false;
+      selectors.refreshDemo.disabled = false;
+      selectors.syncAws.textContent = "Reanudar AWS";
+      if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka sin producer";
+      startPolling();
+      fetchAwsStatus();
+      fetchPipelineHealth();
+      setSyncStatus(`No se pudo reanudar el producer: ${error.message}`, "error");
+    } else {
+      state.awsConnected = false;
+      selectors.syncAws.disabled = false;
+      selectors.refreshDemo.disabled = true;
+      selectors.syncAws.textContent = "Conectar AWS";
+      if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
+      state.snapshot.data_mode = "disconnected";
+      renderCounts();
+      setSyncStatus(`AWS no disponible: ${error.message}. El dashboard queda vacio, sin fallback local.`, "error");
+    }
+  } finally {
+    state.resumeInFlight = false;
   }
 }
 
 async function requestAwsStop() {
+  if (!state.awsConnected && !state.startupInProgress) {
+    setSyncStatus("La plataforma ya está desconectada. Usa Conectar AWS para iniciar ambos EMR.", "ok");
+    return;
+  }
+
+  // Invalida consultas en vuelo antes del stop para que ninguna respuesta
+  // anterior pueda reconstruir el panel de salud durante el reinicio.
+  state.sessionGeneration += 1;
+  stopPolling();
   selectors.refreshDemo.disabled = true;
   selectors.refreshDemo.classList.add("is-busy");
   selectors.refreshDemo.textContent = "Deteniendo...";
   selectors.syncAws.disabled = true;
-  setSyncStatus("Deteniendo Kafka y procesos streaming en EMR...", "ok");
+  setSyncStatus("Cancelando Kafka, Flink, Spark y YARN en ambos EMR...", "ok");
 
   try {
     const response = await fetch("/api/aws/stop", { method: "POST" });
@@ -165,28 +224,183 @@ async function requestAwsStop() {
     if (!response.ok || !result.ok) {
       throw new Error(result.error || "No se pudo detener AWS");
     }
-    setSyncStatus("Streaming detenido. Puedes volver a conectar AWS.", "ok");
-  } catch (error) {
-    setSyncStatus(`No se pudo confirmar el stop remoto: ${error.message}. La sesion local fue reiniciada.`, "error");
-  } finally {
     resetStreamingState();
     selectors.syncAws.disabled = false;
     selectors.syncAws.textContent = "Conectar AWS";
+    setSyncStatus("Ambos EMR fueron detenidos y la salud quedó limpia. Puedes volver a conectar AWS.", "ok");
+  } catch (error) {
+    // Si el stop no fue confirmado, conservamos la sesión como conectada:
+    // habilitar Conectar en este punto podría superponer otra ejecución.
+    selectors.syncAws.disabled = true;
+    selectors.syncAws.textContent = "Conectado";
+    startPolling();
+    fetchAwsStatus();
+    fetchSparkStatus();
+    fetchPipelineHealth();
+    setSyncStatus(`No se confirmó la detención de ambos EMR: ${error.message}`, "error");
+  } finally {
     selectors.refreshDemo.classList.remove("is-busy");
-    selectors.refreshDemo.textContent = "Reiniciar cinta";
-    selectors.refreshDemo.disabled = false;
+    selectors.refreshDemo.textContent = "Detener plataforma";
+    selectors.refreshDemo.disabled = !state.awsConnected;
   }
 }
 
 function startPolling() {
   if (!state.pollingHandle) state.pollingHandle = window.setInterval(fetchLiveDelta, 3000);
   if (!state.statusPollingHandle) state.statusPollingHandle = window.setInterval(fetchAwsStatus, 5000);
-  if (!state.sparkPollingHandle) state.sparkPollingHandle = window.setInterval(fetchSparkStatus, 5000);
+  if (!state.sparkPollingHandle) state.sparkPollingHandle = window.setInterval(fetchSparkStatus, 3000);
+  if (!state.healthPollingHandle) state.healthPollingHandle = window.setInterval(fetchPipelineHealth, 5000);
+}
+
+function startAwsStartupPolling() {
+  if (!state.startupPollingHandle) {
+    state.startupPollingHandle = window.setInterval(pollAwsStartup, 2500);
+  }
+}
+
+function stopAwsStartupPolling() {
+  if (state.startupPollingHandle) {
+    window.clearInterval(state.startupPollingHandle);
+    state.startupPollingHandle = null;
+  }
+}
+
+function activateAwsStreaming(status = {}, startupStillRunning = false, kafkaConfirmed = true) {
+  state.awsConnected = true;
+  state.awsStatus = status;
+  state.dataSize = Number(status.data_size || state.dataSize || 0);
+  state.sparkBatchSize = Number(status.spark_batch_size || state.sparkBatchSize || 1000);
+  state.sparkMaxConcurrency = Math.max(1, Number(status.spark_max_concurrency || state.sparkMaxConcurrency || 1));
+  state.needsResume = Boolean(status.needs_resume);
+  state.snapshot.data_mode = kafkaConfirmed
+    ? (status.needs_resume ? "aws_paused" : "aws_streaming")
+    : "aws_degraded";
+  applyTopicTotals(status.counts || {});
+  selectors.refreshDemo.disabled = false;
+  if (selectors.kafkaLabel) {
+    selectors.kafkaLabel.textContent = kafkaConfirmed
+      ? (status.needs_resume ? "Kafka sin producer" : "Kafka activo")
+      : "Kafka sin respuesta";
+  }
+
+  if (startupStillRunning) {
+    selectors.syncAws.disabled = true;
+    selectors.syncAws.textContent = "Inicializando compute...";
+  } else {
+    state.startupInProgress = false;
+    state.needsResume = Boolean(status.needs_resume);
+    selectors.syncAws.disabled = !state.needsResume;
+    selectors.syncAws.textContent = state.needsResume
+      ? "Reanudar AWS"
+      : (kafkaConfirmed ? "Conectado" : "Conectado (degradado)");
+  }
+
+  renderSparkBatch();
+  startPolling();
+  fetchLiveDelta();
+  fetchSparkStatus();
+  fetchPipelineHealth();
+}
+
+async function probeKafkaDuringStartup() {
+  if (state.startupKafkaProbePromise) return state.startupKafkaProbePromise;
+  const sessionGeneration = state.sessionGeneration;
+  state.startupKafkaProbePromise = (async () => {
+    state.startupKafkaProbeInFlight = true;
+    try {
+      const response = await fetch("/api/aws/status", { cache: "no-store" });
+      const status = await response.json();
+      if (!response.ok || !status.ok) return false;
+      if (!state.startupInProgress || sessionGeneration !== state.sessionGeneration) return false;
+      activateAwsStreaming(status, true);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      state.startupKafkaProbeInFlight = false;
+    }
+  })();
+  try {
+    return await state.startupKafkaProbePromise;
+  } finally {
+    state.startupKafkaProbePromise = null;
+  }
+}
+
+async function pollAwsStartup() {
+  if (!state.startupInProgress || state.startupStatusInFlight) return;
+  const sessionGeneration = state.sessionGeneration;
+  state.startupStatusInFlight = true;
+  try {
+    const response = await fetch("/api/aws/start/status", { cache: "no-store" });
+    const startup = await response.json();
+    if (!response.ok) throw new Error(startup.error || "No se pudo consultar el arranque.");
+    if (!state.startupInProgress || sessionGeneration !== state.sessionGeneration) return;
+
+    state.dataSize = Number(startup.data_size || state.dataSize || 0);
+    state.sparkBatchSize = Number(startup.spark_batch_size || state.sparkBatchSize || 1000);
+    state.sparkMaxConcurrency = Math.max(1, Number(startup.spark_max_concurrency || state.sparkMaxConcurrency || 1));
+    const kafkaReady = state.awsConnected;
+    setSyncStatus(startup.message || "Inicializando la plataforma distribuida...", startup.status === "failed" ? "error" : "ok");
+
+    if (startup.status === "failed") {
+      if (state.startupKafkaProbeInFlight) {
+        selectors.syncAws.textContent = "Verificando Kafka...";
+        return;
+      }
+      state.startupInProgress = false;
+      stopAwsStartupPolling();
+      if (kafkaReady) {
+        selectors.syncAws.disabled = false;
+        selectors.syncAws.textContent = state.needsResume ? "Reanudar AWS" : "Conectado";
+        setSyncStatus(`Kafka responde, pero el arranque de compute quedó incompleto: ${startup.error || startup.message}`, "error");
+      } else {
+        state.awsConnected = false;
+        selectors.syncAws.disabled = false;
+        selectors.refreshDemo.disabled = true;
+        selectors.syncAws.textContent = "Conectar AWS";
+        if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
+        setSyncStatus(`No se pudo iniciar la plataforma: ${startup.error || startup.message}`, "error");
+      }
+      return;
+    }
+
+    if (startup.status === "ready") {
+      selectors.syncAws.textContent = "Confirmando Kafka...";
+      const kafkaConfirmed = kafkaReady || await probeKafkaDuringStartup();
+      if (!state.startupInProgress || sessionGeneration !== state.sessionGeneration) return;
+      state.startupInProgress = false;
+      stopAwsStartupPolling();
+      if (!kafkaConfirmed) {
+        activateAwsStreaming(startup, false, false);
+        setSyncStatus(
+          "El despliegue terminó, pero Kafka no respondió a la verificación. La plataforma no se reiniciará; se seguirá comprobando y puedes detenerla.",
+          "error"
+        );
+        return;
+      }
+      activateAwsStreaming(state.awsStatus, false, true);
+      setSyncStatus(startup.message || "AWS conectado. Streaming actualizado cada 3 segundos.", "ok");
+      fetchAwsStatus();
+      return;
+    }
+
+    selectors.refreshDemo.disabled = false;
+    selectors.syncAws.disabled = true;
+    selectors.syncAws.textContent = kafkaReady ? "Inicializando compute..." : "Inicializando...";
+    if (!kafkaReady) probeKafkaDuringStartup();
+  } catch (error) {
+    if (!state.startupInProgress || sessionGeneration !== state.sessionGeneration) return;
+    setSyncStatus(`No se pudo consultar el progreso del arranque: ${error.message}. Se reintentará automáticamente.`, "error");
+  } finally {
+    state.startupStatusInFlight = false;
+  }
 }
 
 async function fetchLiveDelta() {
   if (!state.awsConnected) return;
   if (state.liveRefreshInFlight) return;
+  const sessionGeneration = state.sessionGeneration;
   state.liveRefreshInFlight = true;
 
   const params = new URLSearchParams({
@@ -202,9 +416,14 @@ async function fetchLiveDelta() {
     const response = await fetch(`/api/live-delta?${params.toString()}`, { cache: "no-store" });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo obtener delta live");
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
     applyLiveDelta(result);
     setSyncStatus(`Streaming activo: ${result.generated_at || "live"}`, "ok");
   } catch (error) {
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
+    state.snapshot.data_mode = "aws_degraded";
+    if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka sin respuesta";
+    renderCounts();
     setSyncStatus(`Stream remoto no disponible: ${error.message}. Se conserva el ultimo estado.`, "error");
   } finally {
     state.liveRefreshInFlight = false;
@@ -213,17 +432,33 @@ async function fetchLiveDelta() {
 
 async function fetchAwsStatus() {
   if (!state.awsConnected) return;
+  if (state.awsStatusInFlight) return;
+  const sessionGeneration = state.sessionGeneration;
+  state.awsStatusInFlight = true;
   try {
     const response = await fetch("/api/aws/status", { cache: "no-store" });
     const status = await response.json();
     if (!response.ok || !status.ok) throw new Error(status.error || "No se pudo obtener estado AWS");
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
     state.awsStatus = status;
     state.dataSize = Number(status.data_size || state.dataSize || 0);
     state.sparkBatchSize = Number(status.spark_batch_size || state.sparkBatchSize || 1000);
-    maybeStartNextSparkBatch(status);
+    state.sparkMaxConcurrency = Math.max(1, Number(status.spark_max_concurrency || state.sparkMaxConcurrency || 1));
+    state.needsResume = Boolean(status.needs_resume);
+    if (!state.resumeInFlight && !state.startupInProgress) {
+      selectors.syncAws.disabled = !state.needsResume;
+      selectors.syncAws.textContent = state.needsResume ? "Reanudar AWS" : "Conectado";
+      selectors.refreshDemo.disabled = false;
+      if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = state.needsResume ? "Kafka sin producer" : "Kafka activo";
+    }
+    applyTopicTotals(status.counts);
+    if (!status.needs_resume) maybeStartNextSparkBatch(status);
     renderSparkBatch();
   } catch (error) {
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
     if (selectors.sparkBatchStatus) selectors.sparkBatchStatus.textContent = `aws status error`;
+  } finally {
+    state.awsStatusInFlight = false;
   }
 }
 
@@ -232,14 +467,30 @@ async function fetchSparkStatus() {
     renderSparkBatch();
     return;
   }
+  if (state.sparkStatusInFlight) return;
+  const sessionGeneration = state.sessionGeneration;
+  state.sparkStatusInFlight = true;
   try {
     const response = await fetch("/api/spark/status", { cache: "no-store" });
     const status = await response.json();
     if (!response.ok || !status.ok) throw new Error(status.error || "No se pudo obtener estado Spark");
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
+    const remoteBatches = status.batches || {};
+    const mergedBatches = { ...remoteBatches };
+    for (const [batchId, previous] of Object.entries(state.sparkBatch.batches || {})) {
+      if (
+        !mergedBatches[batchId] &&
+        ["launching", "queued", "retrying", "failed"].includes(previous.status)
+      ) {
+        mergedBatches[batchId] = previous;
+      }
+    }
     state.sparkBatch = {
-      batches: status.batches || {},
+      batches: mergedBatches,
       latest_batch_id: status.latest_batch_id || ""
     };
+    state.sparkMaxConcurrency = Math.max(1, Number(status.max_concurrency || state.sparkMaxConcurrency || 1));
+    state.sparkStatusLoaded = true;
     const selected = state.selectedSparkBatchId ? state.sparkBatch.batches[state.selectedSparkBatchId] : null;
     if (selected && selected.status !== "done") {
       state.selectedSparkBatchId = "";
@@ -248,8 +499,46 @@ async function fetchSparkStatus() {
     updateSparkMetricFromBatches();
     renderSparkBatch();
   } catch {
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
     if (selectors.sparkBatchStatus) selectors.sparkBatchStatus.textContent = "spark status error";
+  } finally {
+    state.sparkStatusInFlight = false;
   }
+}
+
+async function fetchPipelineHealth() {
+  if (!state.awsConnected) {
+    renderPipelineHealth();
+    return;
+  }
+  if (state.healthInFlight) return;
+  const sessionGeneration = state.sessionGeneration;
+  state.healthInFlight = true;
+  try {
+    const response = await fetch("/api/pipeline/health", { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo obtener la salud distribuida");
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
+    state.pipelineHealth = result;
+  } catch (error) {
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
+    const previousKafka = state.pipelineHealth?.kafka || {};
+    const statusCounts = state.awsStatus?.counts || {};
+    state.pipelineHealth = {
+      status: state.awsStatus?.ok ? "degraded" : "offline",
+      generated_at: new Date().toISOString(),
+      error: error.message,
+      workers: state.pipelineHealth?.workers || [],
+      kafka: {
+        ...previousKafka,
+        topics: Object.keys(previousKafka.topics || {}).length ? previousKafka.topics : statusCounts
+      },
+      actions: ["Kafka responde, pero no se pudo completar el diagnóstico de EMR_WORKERS."]
+    };
+  } finally {
+    state.healthInFlight = false;
+  }
+  renderPipelineHealth();
 }
 
 async function fetchSparkComments(batchId) {
@@ -258,6 +547,7 @@ async function fetchSparkComments(batchId) {
 
   state.selectedSparkBatchId = batchId;
   state.sparkCommentsLoading = true;
+  const sessionGeneration = state.sessionGeneration;
   renderSparkComments();
 
   try {
@@ -265,11 +555,13 @@ async function fetchSparkComments(batchId) {
     const response = await fetch(`/api/spark/comments?${params.toString()}`, { cache: "no-store" });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || "No se pudieron cargar comentarios Spark");
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
     state.sparkComments = result.comments || [];
     if (selectors.sparkCommentsHint) {
       selectors.sparkCommentsHint.textContent = `${batchId}: ${state.sparkComments.length} comentarios ofensivos filtrados por Spark ML.`;
     }
   } catch (error) {
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
     state.sparkComments = [];
     if (selectors.sparkCommentsHint) selectors.sparkCommentsHint.textContent = `${batchId}: ${error.message}`;
   } finally {
@@ -280,29 +572,71 @@ async function fetchSparkComments(batchId) {
 }
 
 async function restoreAwsSessionIfRunning() {
+  selectors.syncAws.disabled = true;
+  selectors.syncAws.textContent = "Comprobando...";
   try {
+    const startupResponse = await fetch("/api/aws/start/status", { cache: "no-store" });
+    const startup = await startupResponse.json();
+    if (startupResponse.ok && startup.starting) {
+      state.startupInProgress = true;
+      state.dataSize = Number(startup.data_size || state.dataSize || 0);
+      state.sparkBatchSize = Number(startup.spark_batch_size || state.sparkBatchSize || 1000);
+      state.sparkMaxConcurrency = Math.max(1, Number(startup.spark_max_concurrency || state.sparkMaxConcurrency || 1));
+      selectors.syncAws.disabled = true;
+      selectors.refreshDemo.disabled = false;
+      selectors.syncAws.textContent = "Inicializando...";
+      setSyncStatus(startup.message || "El arranque sigue en curso. Reconectando el monitor...", "ok");
+      startAwsStartupPolling();
+      pollAwsStartup();
+      return;
+    }
+    if (startupResponse.ok && startup.status === "stopped") {
+      throw new Error("La plataforma fue detenida de forma confirmada.");
+    }
+
     const response = await fetch("/api/aws/status", { cache: "no-store" });
     const status = await response.json();
     if (!response.ok || !status.ok) {
       throw new Error(status.error || "AWS aun no esta conectado.");
     }
 
-    state.awsConnected = true;
     state.awsStatus = status;
     state.dataSize = Number(status.data_size || state.dataSize || 0);
     state.sparkBatchSize = Number(status.spark_batch_size || state.sparkBatchSize || 1000);
+    state.sparkMaxConcurrency = Math.max(1, Number(status.spark_max_concurrency || state.sparkMaxConcurrency || 1));
+    applyTopicTotals(status.counts);
+    if (status.needs_resume) {
+      state.awsConnected = true;
+      state.needsResume = true;
+      state.snapshot.data_mode = "aws_paused";
+      selectors.syncAws.disabled = false;
+      selectors.refreshDemo.disabled = false;
+      selectors.syncAws.textContent = "Reanudar AWS";
+      if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka sin producer";
+      setSyncStatus("Kafka está activo, pero la sesión quedó incompleta. Reanudar continuará desde la siguiente fila pendiente.", "error");
+      renderSparkBatch();
+      startPolling();
+      fetchPipelineHealth();
+      return;
+    }
+
+    state.awsConnected = true;
     state.snapshot.data_mode = "aws_streaming";
+    renderSparkBatch();
     selectors.syncAws.disabled = true;
+    selectors.refreshDemo.disabled = false;
     selectors.syncAws.textContent = "Conectado";
     if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka activo";
     setSyncStatus("AWS ya estaba conectado. Reanudando streaming desde Kafka.", "ok");
     startPolling();
     fetchLiveDelta();
+    await fetchSparkStatus();
     fetchAwsStatus();
-    fetchSparkStatus();
+    fetchPipelineHealth();
   } catch {
     state.awsConnected = false;
     selectors.syncAws.disabled = false;
+    selectors.refreshDemo.disabled = true;
     selectors.syncAws.textContent = "Conectar AWS";
     if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
     state.snapshot.data_mode = "disconnected";
@@ -311,23 +645,33 @@ async function restoreAwsSessionIfRunning() {
 }
 
 async function maybeStartNextSparkBatch(status = state.awsStatus) {
-  if (!state.awsConnected || state.sparkStartInFlight || !status) return;
+  if (!state.awsConnected || !state.sparkStatusLoaded || state.sparkStartInFlight || !status) return;
+  const sessionGeneration = state.sessionGeneration;
   const eligible = Number(status.eligible_spark_target || 0);
   const batchSize = Number(status.spark_batch_size || state.sparkBatchSize || 1000);
   if (!eligible || !batchSize) return;
 
   const batches = state.sparkBatch.batches || {};
-  const hasRunning = Object.values(batches).some((batch) => batch.status === "running" || batch.status === "queued");
-  if (hasRunning) return;
+  const activeBatch = Object.values(batches)
+    .find((batch) => ["launching", "queued", "running"].includes(batch.status));
+  if (activeBatch || state.sparkStartingTargets.size) return;
 
   let target = 0;
   for (let next = batchSize; next <= eligible; next += batchSize) {
     const id = sparkBatchId(next);
     const existing = batches[id];
-    if (!existing && !state.sparkStartingTargets.has(next)) {
+    if (!existing) {
       target = next;
       break;
     }
+    if (existing.status === "done") continue;
+    if (
+      existing.status === "retrying" &&
+      existing.retryable !== false &&
+      Number(existing.attempts || 0) < 3 &&
+      (!existing.next_retry_at || Date.now() >= Date.parse(existing.next_retry_at))
+    ) target = next;
+    break;
   }
   if (!target) return;
 
@@ -338,24 +682,38 @@ async function maybeStartNextSparkBatch(status = state.awsStatus) {
     const params = new URLSearchParams({ target: String(target), batchId: sparkBatchId(target) });
     const response = await fetch(`/api/spark/start?${params.toString()}`, { method: "POST" });
     const result = await response.json();
+    if (result.busy) return;
     if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo iniciar Spark");
-    await fetchSparkStatus();
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
+    state.sparkBatch.batches[result.batch_id || sparkBatchId(target)] = {
+      jobs: {},
+      outputs: {},
+      ...result
+    };
   } catch (error) {
+    if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
     const id = sparkBatchId(target);
     state.sparkBatch.batches[id] = {
       batch_id: id,
+      range_start: Math.max(1, target - batchSize + 1),
+      range_end: target,
       target_count: target,
       spark_batch_size: batchSize,
       status: "failed",
-      current_job: "start",
+      current_job: "launch",
       message: error.message,
+      attempts: 3,
+      retryable: false,
       jobs: {},
       outputs: {}
     };
-    renderSparkBatch();
   } finally {
+    state.sparkStartingTargets.delete(target);
     state.sparkStartInFlight = false;
   }
+  if (!state.awsConnected || sessionGeneration !== state.sessionGeneration) return;
+  renderSparkBatch();
+  fetchSparkStatus();
 }
 
 function applyLiveDelta(delta) {
@@ -366,9 +724,25 @@ function applyLiveDelta(delta) {
   const flinkEvents = (delta.flink_events || []).map((event) => normalizeIncomingEvent(event, "stream"));
   const filteredMessages = (delta.filtered_messages || []).map((event) => normalizeIncomingEvent(event, "alert"));
 
-  state.sessionCounts.raw_youtube_chat += rawMessages.length;
-  state.sessionCounts.nlp_stream_results += flinkEvents.length;
-  state.sessionCounts.alerts_polarization += filteredMessages.filter((event) => event.source_topic === "alerts_polarization" || event.source === "alert").length;
+  applyTopicTotals(delta.counts);
+  const rawTotal = topicTotal(delta.counts?.raw_youtube_chat, state.sessionCounts.raw_youtube_chat);
+  if (rawTotal > 0 && selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka activo";
+  const eligibleSparkTarget = Math.min(
+    Math.floor(rawTotal / Math.max(1, state.sparkBatchSize)) * Math.max(1, state.sparkBatchSize),
+    state.dataSize || rawTotal
+  );
+  state.awsStatus = {
+    ...(state.awsStatus || {}),
+    ok: true,
+    counts: {
+      ...(state.awsStatus?.counts || {}),
+      ...(delta.counts || {})
+    },
+    eligible_spark_target: eligibleSparkTarget,
+    spark_batch_size: state.sparkBatchSize,
+    spark_max_concurrency: state.sparkMaxConcurrency
+  };
+  if (!state.needsResume) maybeStartNextSparkBatch(state.awsStatus);
   state.sessionCounts.filtered_messages += filteredMessages.length;
   state.snapshot.counts = { ...state.snapshot.counts, ...state.sessionCounts };
   state.snapshot.generated_at = delta.generated_at || state.snapshot.generated_at;
@@ -394,10 +768,44 @@ function applyLiveDelta(delta) {
   }
 }
 
+function topicTotal(value, fallback = 0) {
+  if (value && typeof value === "object") return Number(value.total ?? fallback);
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function applyTopicTotals(counts = {}) {
+  state.sessionCounts.raw_youtube_chat = topicTotal(
+    counts.raw_youtube_chat,
+    state.sessionCounts.raw_youtube_chat
+  );
+  if (counts.normalized_comments !== undefined) {
+    const reportedNormalized = topicTotal(
+      counts.normalized_comments,
+      state.sessionCounts.nlp_stream_results
+    );
+    state.sessionCounts.nlp_stream_results = Math.min(
+      state.sessionCounts.raw_youtube_chat,
+      Math.max(state.sessionCounts.nlp_stream_results, reportedNormalized)
+    );
+  }
+  state.sessionCounts.flink_output_total = topicTotal(
+    counts.flink_output_total ?? counts.nlp_stream_results,
+    state.sessionCounts.flink_output_total
+  );
+  state.sessionCounts.alerts_polarization = topicTotal(
+    counts.alerts_polarization,
+    state.sessionCounts.alerts_polarization
+  );
+  state.snapshot.counts = { ...state.snapshot.counts, ...state.sessionCounts };
+  renderCounts();
+}
+
 function normalizeCounts(counts) {
   return {
     raw_youtube_chat: counts.raw_youtube_chat ?? counts.raw ?? 0,
-    nlp_stream_results: counts.nlp_stream_results ?? counts.flink ?? 0,
+    nlp_stream_results: counts.normalized_comments ?? 0,
+    flink_output_total: counts.flink_output_total ?? counts.nlp_stream_results ?? counts.flink ?? 0,
     alerts_polarization: counts.alerts_polarization ?? counts.alerts ?? 0,
     filtered_messages: counts.filtered_messages ?? state.snapshot.counts?.filtered_messages ?? 0,
     spark_curated_rows: counts.spark_curated_rows ?? 0,
@@ -405,7 +813,8 @@ function normalizeCounts(counts) {
   };
 }
 
-function resetStreamingState() {
+function stopPolling() {
+  stopAwsStartupPolling();
   if (state.pollingHandle) {
     window.clearInterval(state.pollingHandle);
     state.pollingHandle = null;
@@ -418,6 +827,15 @@ function resetStreamingState() {
     window.clearInterval(state.sparkPollingHandle);
     state.sparkPollingHandle = null;
   }
+  if (state.healthPollingHandle) {
+    window.clearInterval(state.healthPollingHandle);
+    state.healthPollingHandle = null;
+  }
+}
+
+function resetStreamingState() {
+  state.sessionGeneration += 1;
+  stopPolling();
   state.snapshot = emptyStreamingSnapshot();
   state.awsConnected = false;
   state.masterQueue = [];
@@ -434,19 +852,34 @@ function resetStreamingState() {
   state.actorTimeline = [];
   state.sessionCounts = { ...state.snapshot.counts };
   state.awsStatus = null;
+  state.pipelineHealth = null;
   state.sparkBatch = { batches: {}, latest_batch_id: "" };
+  state.sparkStatusLoaded = false;
+  state.sparkMaxConcurrency = 1;
+  state.needsResume = false;
+  state.resumeInFlight = false;
+  state.startupInProgress = false;
+  state.startupStatusInFlight = false;
+  state.startupKafkaProbeInFlight = false;
+  state.startupKafkaProbePromise = null;
+  state.awsStatusInFlight = false;
+  state.sparkStatusInFlight = false;
+  state.healthInFlight = false;
   state.selectedSparkBatchId = "";
   state.sparkComments = [];
   state.sparkCommentsQuery = "";
   state.sparkCommentsLoading = false;
   state.sparkStartInFlight = false;
   state.sparkStartingTargets = new Set();
+  state.playing = true;
   if (selectors.streamList) selectors.streamList.innerHTML = "";
   if (selectors.rawChatList) selectors.rawChatList.innerHTML = "";
   if (selectors.filteredList) selectors.filteredList.innerHTML = "";
   if (selectors.sparkCommentsList) selectors.sparkCommentsList.innerHTML = "";
   if (selectors.sparkCommentsSearch) selectors.sparkCommentsSearch.value = "";
   if (selectors.kafkaLabel) selectors.kafkaLabel.textContent = "Kafka en espera";
+  if (selectors.playStream) selectors.playStream.textContent = "Pausar cinta";
+  if (selectors.refreshDemo) selectors.refreshDemo.disabled = true;
   renderAll();
 }
 
@@ -750,6 +1183,7 @@ function renderCounts() {
     const modeLabels = {
       disconnected: "desconectado",
       aws_streaming: "aws streaming",
+      aws_degraded: "aws degradado",
       aws_delta: "aws delta",
       starting: "conectando"
     };
@@ -917,10 +1351,12 @@ function expectedSparkBatches() {
     const id = sparkBatchId(target);
     batches.push(actual[id] || {
       batch_id: id,
+      range_start: Math.max(1, target - batchSize + 1),
+      range_end: target,
       target_count: target,
       status: "pending",
       current_job: "pending",
-      message: "Esperando turno de ejecucion Spark",
+      message: "Esperando que Kafka complete este rango",
       rows: 0,
       jobs: {},
       outputs: {}
@@ -930,10 +1366,15 @@ function expectedSparkBatches() {
 }
 
 function updateSparkMetricFromBatches() {
-  const completed = sortedSparkBatches().filter((batch) => batch.status === "done");
-  const maxCompleted = completed.reduce((max, batch) => Math.max(max, Number(batch.target_count || batch.rows || 0)), 0);
-  state.sessionCounts.spark_curated_rows = maxCompleted;
-  state.snapshot.counts = { ...state.snapshot.counts, spark_curated_rows: maxCompleted };
+  const batchSize = Number(state.sparkBatchSize || 1000);
+  let contiguousCompleted = 0;
+  for (let target = batchSize; ; target += batchSize) {
+    const batch = state.sparkBatch.batches?.[sparkBatchId(target)];
+    if (!batch || batch.status !== "done") break;
+    contiguousCompleted = target;
+  }
+  state.sessionCounts.spark_curated_rows = contiguousCompleted;
+  state.snapshot.counts = { ...state.snapshot.counts, spark_curated_rows: contiguousCompleted };
   renderCounts();
 }
 
@@ -948,9 +1389,11 @@ function renderSparkBatch() {
     ?? 0;
   const dataSize = state.dataSize || "DATA_SIZE";
   const batchSize = state.sparkBatchSize || 1000;
+  const maxConcurrency = Math.max(1, Number(state.sparkMaxConcurrency || 1));
+  const activeCount = batches.filter((batch) => ["launching", "running", "queued"].includes(batch.status)).length;
   const eligible = state.awsStatus?.eligible_spark_target || 0;
   const rawLag = state.liveCursor ? "" : "";
-  const running = batches.find((batch) => batch.status === "running" || batch.status === "queued");
+  const running = batches.find((batch) => ["launching", "running", "queued"].includes(batch.status));
   const statusText = running
     ? `${running.batch_id}: ${running.current_job || "running"}`
     : actualBatches.length
@@ -962,7 +1405,7 @@ function renderSparkBatch() {
     <div class="spark-stat"><span>raw visto</span><strong>${escapeHtml(String(rawSeen))}</strong></div>
     <div class="spark-stat"><span>data size</span><strong>${escapeHtml(String(dataSize))}</strong></div>
     <div class="spark-stat"><span>batch size</span><strong>${escapeHtml(String(batchSize))}</strong></div>
-    <div class="spark-stat"><span>elegible</span><strong>${escapeHtml(String(eligible))}</strong></div>
+    <div class="spark-stat"><span>activos / límite</span><strong>${escapeHtml(`${activeCount} / ${maxConcurrency}`)}</strong></div>
   `;
 
   if (!batches.length && !state.sparkStartInFlight) {
@@ -989,7 +1432,8 @@ function renderSparkBatch() {
       return `
         <article class="spark-card ${escapeHtml(batch.status || "queued")} ${selectedClass}" data-batch-id="${escapeHtml(batch.batch_id || "")}" data-clickable="${isDone ? "true" : "false"}" title="${escapeHtml(title)}">
           <strong>${escapeHtml(batch.batch_id || "batch")} · ${escapeHtml(batch.status || "queued")}</strong>
-          <p>Target ${escapeHtml(String(batch.target_count || 0))} · rows ${escapeHtml(String(batch.rows || 0))}</p>
+          <p>Rango ${escapeHtml(String(batch.range_start || "?"))}–${escapeHtml(String(batch.range_end || batch.target_count || "?"))} · rows ${escapeHtml(String(batch.rows || 0))}</p>
+          ${batch.worker ? `<p><code>${escapeHtml(batch.worker)}</code></p>` : ""}
           <p>${escapeHtml(batch.message || batch.current_job || "Esperando ejecucion")}</p>
           <div class="spark-jobs">${jobRows}</div>
           ${outputs.hybrid ? `<p><code>${escapeHtml(outputs.hybrid)}</code></p>` : ""}
@@ -1233,6 +1677,77 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function renderPipelineHealth() {
+  if (!selectors.healthStatus) return;
+  const health = state.pipelineHealth;
+  const status = health?.status || (state.awsConnected ? "cargando" : "offline");
+  const connected = state.awsConnected && status !== "offline";
+  selectors.healthStatus.textContent = connected
+    ? "conectado"
+    : status === "cargando"
+      ? "consultando"
+      : "sin conexión";
+  selectors.healthPulse.className = `health-pulse ${connected ? "healthy" : escapeHtml(status)}`;
+  selectors.healthUpdated.textContent = health?.generated_at
+    ? new Date(health.generated_at).toLocaleString()
+    : "sin datos";
+
+  const kafka = health?.kafka || {};
+  const quorum = kafka.quorum || {};
+  const voterCount = Number(quorum.voter_count || 0);
+  selectors.healthQuorumSummary.textContent = `${voterCount} / 3`;
+  selectors.healthBrokers.innerHTML = Array.from({ length: 3 }, (_, index) => {
+    const online = index < voterCount;
+    const leader = String(quorum.leader_id ?? "") === String(index + 1);
+    return `
+      <div class="broker-node ${online ? "" : "offline"}">
+        <span>broker ${index + 1}</span>
+        <small>${leader ? "controller líder" : online ? "ISR activo" : "sin respuesta"}</small>
+      </div>
+    `;
+  }).join("");
+
+  const topics = kafka.topics || {};
+  const rates = kafka.rates_per_second || {};
+  const topicOrder = ["raw_youtube_chat", "nlp_stream_results", "alerts_polarization", "nlp_batch_results"];
+  selectors.healthTopics.innerHTML = topicOrder.map((topic) => {
+    const current = topics[topic] || {};
+    return `
+      <div class="topic-health-row">
+        <span title="${escapeHtml(topic)}">${escapeHtml(topic)}</span>
+        <small>${escapeHtml(String(current.total || 0))} eventos</small>
+        <small class="topic-rate">${escapeHtml(String(rates[topic] || 0))}/s</small>
+      </div>
+    `;
+  }).join("");
+  const totalLag = kafka.consumer_lag?.total_lag || 0;
+  selectors.healthLagSummary.textContent = `lag ${totalLag}`;
+
+  const workers = health?.workers || [];
+  selectors.healthWorkersSummary.textContent = `${workers.length} cluster${workers.length === 1 ? "" : "s"}`;
+  selectors.healthWorkers.innerHTML = workers.length
+    ? workers.map((worker, index) => {
+      const running = worker.reachable && Number(worker.yarn_nodes_running || 0) > 0;
+      const apps = worker.yarn_applications || {};
+      return `
+        <div class="worker-health-row">
+          <i class="health-state-dot ${running ? "" : "offline"}"></i>
+          <span title="${escapeHtml(worker.host || "")}">compute ${index + 1}${worker.flink_owner ? " · Flink" : ""}</span>
+          <small>YARN ${escapeHtml(String(worker.yarn_nodes_running || 0))} · apps ${escapeHtml(String(apps.running || 0))}</small>
+        </div>
+      `;
+    }).join("")
+    : '<div class="worker-health-row"><i class="health-state-dot offline"></i><span>sin workers</span><small>esperando conexión</small></div>';
+
+  const actions = health?.actions || [];
+  selectors.healthActions.className = `health-actions ${status === "healthy" ? "healthy" : ""}`;
+  selectors.healthActions.textContent = status === "healthy"
+    ? "Quorum, réplicas, Flink y YARN operan dentro de los parámetros esperados."
+    : actions.length
+      ? actions.join(" ")
+      : health?.error || "Conecta AWS para iniciar el diagnóstico distribuido.";
+}
+
 // ── EVENT BINDINGS ────────────────────────────────────────────────────────
 function bindEvents() {
   let searchDebounce = null;
@@ -1300,6 +1815,7 @@ function renderAll() {
   renderSpark();
   renderSparkBatch();
   renderSparkComments();
+  renderPipelineHealth();
   drawTimeline();
   renderStream({ reset: true });
   renderFilteredMessages();

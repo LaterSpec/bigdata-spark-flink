@@ -1,25 +1,48 @@
-# Current Architecture Mermaid
+# Arquitectura actual
+
+Este diagrama es el resumen canónico. Kafka en `EMR_PRIMARY` recibe primero los eventos y los expone simultáneamente a Flink y Spark en la capa de cómputo.
 
 ```mermaid
 flowchart LR
-    A["YouTube Live Chat JSON/CSV raw<br/>160,464 comentarios"] --> B["S3 Data Lake Raw<br/>fuente durable"]
-    B --> C["Python Producer<br/>simula streaming desde S3"]
-    C --> D["Kafka self-managed en EMR master<br/>topic: raw_youtube_chat"]
+    L["S3 Data Lake Raw"]
 
-    D --> E["Spark Batch en EMR<br/>5 jobs batch"]
-    D --> F["Flink Streaming en EMR<br/>5 jobs streaming"]
+    subgraph K["EMR_PRIMARY · Kafka primero"]
+        P["Producer Lake→Kafka"]
+        BUS["Kafka KRaft<br/>bus lógico"]
+        RAW[("raw_youtube_chat")]
+        OUT[("nlp_stream_results<br/>alerts_polarization")]
+        B1["Broker/controller 1"]
+        B2["Broker/controller 2"]
+        B3["Broker/controller 3"]
+        M["Monitor Kafka"]
 
-    E --> G["S3 Curated<br/>predicciones, reglas, hibrido, agregados"]
-    F --> H["Kafka topic<br/>nlp_stream_results"]
-    F --> I["Kafka topic<br/>alerts_polarization"]
+        P --> BUS --> RAW
+        BUS --- OUT
+        BUS --- B1
+        BUS --- B2
+        BUS --- B3
+        B1 <--> B2
+        B2 <--> B3
+        B3 <--> B1
+        M -. observa .-> BUS
+    end
 
-    G --> J["Dashboard futuro"]
-    H --> J
-    I --> J
+    subgraph C["EMR_WORKERS · consumidores"]
+        F["Flink<br/>5 jobs streaming"]
+        SQ["Cola Spark<br/>concurrencia segura = 1"]
+        S1["Batch activo<br/>rango disjunto"]
+    end
 
-    K["Dataset externo OffendES<br/>labels de ofensividad"] --> L["Spark ML Training<br/>modelo base NLP"]
-    L --> E
-
-    M["Reglas locales peruanas<br/>terruqueo, fraude, ONPE, JNE,<br/>actores politicos, insultos locales"] --> E
-    M --> F
+    L --> P
+    RAW --> F
+    RAW --> SQ --> S1
+    F --> OUT
+    S1 --> Q["S3 Curated"]
+    M --> D["Dashboard + salud"]
+    OUT --> D
+    Q --> D
 ```
+
+Flink y Spark no forman una cadena entre sí. Son consumidores independientes del mismo topic raw: Flink produce resultados nuevamente en Kafka y Spark procesa batches disjuntos en orden seguro y persiste datasets en S3.
+
+La especificación completa está en `architecture.md` en la raíz del proyecto.

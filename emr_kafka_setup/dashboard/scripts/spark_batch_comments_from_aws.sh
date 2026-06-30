@@ -7,6 +7,7 @@ ProjectRoot="$(cd "$DashboardRoot/../.." && pwd)"
 
 PemPath="$ProjectRoot/final.pem"
 HostName=""
+WorkerHosts=""
 UserName="hadoop"
 BatchId=""
 Bucket="s3://figuretibucket"
@@ -30,6 +31,7 @@ read_env_value() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HostName="${2:-}"; shift 2 ;;
+    --workers) WorkerHosts="${2:-}"; shift 2 ;;
     --pem) PemPath="${2:-}"; shift 2 ;;
     --user) UserName="${2:-hadoop}"; shift 2 ;;
     --batch-id) BatchId="${2:-}"; shift 2 ;;
@@ -39,8 +41,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$HostName" ]]; then HostName="$(read_env_value EMR_PRIMARY || true)"; fi
 if [[ -z "$BatchId" ]]; then echo '{"ok":false,"error":"Falta --batch-id"}'; exit 0; fi
+if [[ -z "$WorkerHosts" ]]; then WorkerHosts="$(read_env_value EMR_WORKERS || true)"; fi
+if [[ -z "$HostName" && -n "$WorkerHosts" ]]; then
+  IFS=',; ' read -r -a Workers <<< "$WorkerHosts"
+  target="${BatchId#batch_}"
+  target=$((10#$target))
+  batch_size="$(read_env_value SPARK_BATCH_SIZE || true)"
+  batch_size="${batch_size:-1000}"
+  batch_index=$(( (target + batch_size - 1) / batch_size ))
+  HostName="${Workers[$(( (batch_index - 1) % ${#Workers[@]} ))]}"
+fi
 if [[ "$PemPath" != /* ]]; then PemPath="$DashboardRoot/$PemPath"; fi
 if [[ -z "$HostName" || ! -f "$PemPath" ]]; then
   echo '{"ok":false,"error":"host o PEM no configurado"}'

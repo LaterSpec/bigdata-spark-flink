@@ -4,6 +4,7 @@ set -euo pipefail
 KAFKA_HOME="${KAFKA_HOME:-/home/hadoop/kafka}"
 BOOTSTRAP_SERVER="${BOOTSTRAP_SERVER:-localhost:9092}"
 PARTITIONS="${PARTITIONS:-3}"
+REPLICATION_FACTOR="${REPLICATION_FACTOR:-3}"
 RETENTION_MS="${RETENTION_MS:-86400000}"
 
 topics=(
@@ -20,9 +21,8 @@ for topic in "${topics[@]}"; do
     --if-not-exists \
     --topic "$topic" \
     --partitions "$PARTITIONS" \
-    --replication-factor 1 \
+    --replication-factor "$REPLICATION_FACTOR" \
     --config "retention.ms=$RETENTION_MS"
 done
 
 "$KAFKA_HOME/bin/kafka-topics.sh" --bootstrap-server "$BOOTSTRAP_SERVER" --list
-

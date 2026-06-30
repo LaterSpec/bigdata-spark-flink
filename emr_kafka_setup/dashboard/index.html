@@ -12,7 +12,7 @@
 
       <header class="hero">
         <section class="hero-copy" aria-labelledby="dashboard-title">
-          <p class="eyebrow">S3 Raw -> Kafka -> Spark Batch / Flink Streaming</p>
+          <p class="eyebrow">S3 Raw → EMR_PRIMARY / Kafka → EMR_WORKERS / Flink + Spark</p>
           <h1 id="dashboard-title">Radar electoral de comentarios en vivo</h1>
           <p class="hero-lede">
             Monitoreo local para el proyecto Big Data: comentarios de YouTube Live Chat pasan por Kafka,
@@ -20,7 +20,7 @@
           </p>
           <div class="hero-actions">
             <button class="primary-action" id="play-stream" type="button">Pausar cinta</button>
-            <button class="secondary-action" id="refresh-demo" type="button">Reiniciar cinta</button>
+            <button class="secondary-action" id="refresh-demo" type="button" disabled>Detener plataforma</button>
             <button class="secondary-action sync-action" id="sync-aws" type="button">Conectar AWS</button>
           </div>
           <p class="sync-status" id="sync-status">Frontend listo. AWS aun no se ha iniciado.</p>
@@ -30,7 +30,7 @@
             <span class="kafka-label">Kafka en espera</span>
             <div class="kafka-counts">
               <span>raw_youtube_chat <strong id="raw-count">0</strong></span>
-              <span>nlp_stream_results <strong id="nlp-count">0</strong></span>
+              <span>normalized_comments <strong id="nlp-count">0</strong></span>
               <span>alerts_polarization <strong id="alert-count">0</strong></span>
             </div>
           </div>
@@ -55,9 +55,9 @@
           <small>mensajes desde Kafka</small>
         </article>
         <article class="metric-card">
-          <span class="metric-label">Eventos Flink</span>
+          <span class="metric-label">Flink normalizados</span>
           <strong id="flink-events">0</strong>
-          <small>normalizacion, ventanas y reglas</small>
+          <small>un resultado principal por comentario</small>
         </article>
         <article class="metric-card hot">
           <span class="metric-label">Alertas</span>
@@ -151,6 +151,63 @@
             <p class="spark-comments-hint" id="spark-comments-hint">Selecciona un batch completo para cargar sus comentarios filtrados.</p>
             <div class="live-chat-list spark-comments-list" id="spark-comments-list" aria-live="polite"></div>
           </aside>
+        </div>
+      </section>
+
+      <section class="panel health-deck" aria-label="Salud integral de la plataforma">
+        <div class="panel-heading health-heading">
+          <div>
+            <p class="panel-kicker">control de vuelo distribuido</p>
+            <h2>Salud de la plataforma</h2>
+          </div>
+          <div class="health-heading-status">
+            <span class="health-pulse" id="health-pulse" aria-hidden="true"></span>
+            <span class="live-badge" id="health-status">sin conexión</span>
+            <small id="health-updated">sin datos</small>
+          </div>
+        </div>
+
+        <div class="health-flow" id="health-flow" aria-label="Flujo de datos">
+          <div class="health-flow-node"><span>S3</span><strong>Data lake</strong></div>
+          <i aria-hidden="true"></i>
+          <div class="health-flow-node"><span>EMR_PRIMARY</span><strong>Kafka · 3 brokers</strong></div>
+          <i aria-hidden="true"></i>
+          <div class="health-flow-split">
+            <div class="health-flow-node"><span>EMR_WORKERS · Flink</span><strong>Streaming</strong></div>
+            <div class="health-flow-node"><span>EMR_WORKERS · Spark</span><strong>Batch controlado</strong></div>
+          </div>
+          <i aria-hidden="true"></i>
+          <div class="health-flow-node"><span>S3</span><strong>Curated</strong></div>
+        </div>
+
+        <div class="health-console-grid">
+          <article class="health-console">
+            <div class="health-console-title">
+              <span>Quorum Kafka</span>
+              <strong id="health-quorum-summary">0 / 3</strong>
+            </div>
+            <div class="broker-rack" id="health-brokers"></div>
+          </article>
+
+          <article class="health-console">
+            <div class="health-console-title">
+              <span>Tráfico por topic</span>
+              <strong id="health-lag-summary">lag 0</strong>
+            </div>
+            <div class="topic-health-list" id="health-topics"></div>
+          </article>
+
+          <article class="health-console">
+            <div class="health-console-title">
+              <span>Compute EMR</span>
+              <strong id="health-workers-summary">0 clusters</strong>
+            </div>
+            <div class="worker-health-list" id="health-workers"></div>
+          </article>
+        </div>
+
+        <div class="health-actions" id="health-actions" aria-live="polite">
+          Conecta AWS para iniciar el diagnóstico distribuido.
         </div>
       </section>
 

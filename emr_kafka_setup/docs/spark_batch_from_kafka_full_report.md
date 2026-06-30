@@ -1,19 +1,23 @@
 # Spark Batch desde Kafka - Reporte final
 
+> Actualización operativa 2026-06-30: el flujo está integrado al dashboard con batches disjuntos, idempotencia y `SPARK_MAX_CONCURRENCY=1` por defecto. Las rutas de prueba históricas de este documento se conservan como evidencia.
+
+> **Evidencia histórica con runtime actualizado:** se conservan los resultados originales de 105 mensajes. El runtime vigente procesa rangos disjuntos por `row_number`, distribuidos round-robin entre `EMR_WORKERS`, con un estado JSON atómico por batch.
+
 ## Arquitectura validada
 
 Flujo implementado:
 
 ```text
-S3 Raw -> Python Producer -> Kafka -> Spark Batch -> S3 Curated
+S3 Raw -> Producer en EMR_PRIMARY -> Kafka KRaft -> Flink y Spark en EMR_WORKERS -> Kafka Results / S3 Curated
 ```
 
 Esta fase adapta el bloque Spark Batch para que ya no dependa solo de leer el CSV historico directamente desde S3. Ahora Spark puede consumir datos que pasaron por Kafka y producir datasets curados en S3 bajo rutas nuevas.
 
 ## Entorno
 
-- EMR master: `ip-172-31-14-56.ec2.internal`
-- Kafka: `3.6.2` self-managed en master EMR
+- Nodo de la prueba histórica: `ip-172-31-14-56.ec2.internal`
+- Kafka de la prueba histórica: `3.6.2` single-node
 - Spark: `3.4.1-amzn-2`
 - Scala: `2.12.15`
 - Bootstrap para Spark/YARN: `ip-172-31-14-56.ec2.internal:9092`
@@ -251,12 +255,12 @@ El resultado final defendible es `hybrid_risk_level`, no la prediccion cruda de 
 
 - La prueba usa una muestra pequena de `105` mensajes ya publicados en Kafka.
 - No se ejecuto la carga completa de `160,464` comentarios.
-- Kafka esta self-managed en el master EMR por restricciones academicas de AWS Academy Learner Lab; no es configuracion productiva.
+- La prueba histórica usó Kafka en un único master. El runtime vigente usa tres brokers/controllers en `EMR_PRIMARY`; Kafka continúa self-managed por las restricciones académicas.
 - Job 3 reutiliza modelos previamente entrenados porque ya existian en S3.
 - El dataset peruano de YouTube no tiene labels humanos.
 - OffendES es una senal general de ofensividad, no una verdad final politica.
 - La union de Job 5 usa `kafka_topic + kafka_partition + kafka_offset` como llave principal para evitar duplicados cuando `event_id` se repite por replay.
 
-## Proximo paso
+## Estado posterior
 
-Implementar Flink Streaming como consumidor de `raw_youtube_chat` para cubrir la capa de baja latencia: limpieza streaming, throughput, keywords politicas, polarizacion y alertas.
+Flink Streaming ya consume `raw_youtube_chat` mediante cinco grupos estables. El dashboard coordina ambos motores y conserva Spark como capa batch de reglas, inferencia OffendES y scoring híbrido.

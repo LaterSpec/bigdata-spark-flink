@@ -71,9 +71,10 @@ cat > "$RemotePython" <<'PY'
 import base64
 import json
 import os
+import time
 from datetime import datetime, timezone
 
-from kafka import KafkaConsumer, TopicPartition
+from kafka import KafkaAdminClient, KafkaConsumer, TopicPartition
 
 BROKER = os.environ.get("BROKER", "localhost:9092")
 
@@ -131,14 +132,36 @@ def is_filtered_flink_event(event):
 
 
 cursor = load_cursor()
-consumer = KafkaConsumer(
-    bootstrap_servers=BROKER,
-    enable_auto_commit=False,
-    consumer_timeout_ms=600,
-    request_timeout_ms=6000,
-    api_version_auto_timeout_ms=4000,
-    value_deserializer=lambda value: value,
-)
+consumer = None
+last_connection_error = None
+for attempt in range(3):
+    try:
+        consumer = KafkaConsumer(
+            bootstrap_servers=BROKER,
+            enable_auto_commit=False,
+            consumer_timeout_ms=600,
+            request_timeout_ms=6000,
+            api_version_auto_timeout_ms=4000,
+            value_deserializer=lambda value: value,
+        )
+        break
+    except Exception as exc:
+        last_connection_error = exc
+        if attempt < 2:
+            time.sleep(1.5)
+
+if consumer is None:
+    print(json.dumps({
+        "ok": False,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "data_mode": "aws_degraded",
+        "error": (
+            "Kafka no aceptó conexiones después de 3 intentos "
+            f"({type(last_connection_error).__name__})."
+        ),
+    }, ensure_ascii=False))
+    raise SystemExit(0)
+
 payload = {
     "ok": True,
     "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -229,9 +252,35 @@ for topic, (bucket, limit) in TOPICS.items():
         for tp in topic_partitions
     )
 
+try:
+    admin = KafkaAdminClient(
+        bootstrap_servers=BROKER,
+        request_timeout_ms=6000,
+        api_version_auto_timeout_ms=4000,
+    )
+    committed = admin.list_consumer_group_offsets("flink-job1-normalize")
+    normalized_partitions = {
+        str(tp.partition): max(0, int(metadata.offset))
+        for tp, metadata in committed.items()
+        if tp.topic == "raw_youtube_chat" and metadata is not None and metadata.offset is not None
+    }
+    admin.close()
+    raw_total = int(payload["counts"].get("raw_youtube_chat", 0))
+    payload["counts"]["normalized_comments"] = {
+        "total": min(raw_total, sum(normalized_partitions.values())),
+        "partitions": normalized_partitions,
+    }
+except Exception as exc:
+    payload["counts"]["normalized_comments"] = {
+        "total": 0,
+        "partitions": {},
+        "error": f"No se pudo leer flink-job1-normalize: {type(exc).__name__}",
+    }
+
 for bucket in ("raw_messages", "flink_events", "filtered_messages"):
     payload[bucket].sort(key=lambda item: (item.get("source_partition", 0), item.get("source_offset", 0)))
 
+payload["counts"]["flink_output_total"] = payload["counts"].get("nlp_stream_results", 0)
 consumer.close()
 print(json.dumps(payload, ensure_ascii=False))
 PY

@@ -1,13 +1,16 @@
 # Plan de pipeline Big Data - Discurso discriminatorio y polarizacion politica
 
+> **Registro histórico:** las tareas y decisiones de fase se conservan como evidencia. El diagrama inicial sí refleja la arquitectura implementada; ante cualquier contradicción posterior prevalece `architecture.md`.
+
 ## 0. Idea central del proyecto
 
 Proyecto: **Deteccion y analisis del discurso discriminatorio y polarizacion politica en redes sociales usando Big Data**.
 
-### Estado logrado - AWS/S3/EMR/Spark Batch
+### Estado logrado - plataforma distribuida
 
 - [x] Data Lake en S3.
-- [x] EMR 3 nodos: 1 Primary/Master y 2 Core/Workers.
+- [x] `EMR_PRIMARY` de tres nodos dedicado a Kafka KRaft.
+- [x] Uno o más `EMR_WORKERS` dedicados a Flink y Spark/YARN.
 - [x] Spark Batch ejecutado en EMR.
 - [x] Procesamiento Spark sobre 160,464 comentarios.
 - [x] Reglas multilabel locales para terruqueo, fraude, instituciones electorales, menciones politicas, polarizacion, lenguaje discriminatorio, insultos y spam/ruido.
@@ -18,20 +21,20 @@ Proyecto: **Deteccion y analisis del discurso discriminatorio y polarizacion pol
 - [x] Spark ML inference sobre YouTube full.
 - [x] Hybrid scoring con `hybrid_risk_level` y `hybrid_risk_reason`.
 - [x] 5 jobs Spark Batch documentados en `docs/SPARK_BATCH_RECORDS.md`.
-- [x] Nueva arquitectura objetivo documentada en `architecture.md`.
+- [x] Arquitectura vigente documentada en `architecture.md`.
 
 El proyecto debe cumplir lo pedido en la propuesta:
 
-- [ ] Declarar y justificar la fuente de datos.
-- [ ] Usar Apache Kafka para transmision de datos.
-- [ ] Usar Apache Flink para procesamiento streaming.
+- [x] Declarar y justificar la fuente de datos: YouTube Live Chat electoral peruano recolectado con `yt-dlp`, más OffendES como corpus etiquetado externo.
+- [x] Usar Apache Kafka para transmision de datos.
+- [x] Usar Apache Flink para procesamiento streaming.
 - [x] Usar Apache Spark para procesamiento batch.
-- [ ] Implementar minimo 2 topics Kafka.
-- [ ] Documentar 5 jobs streaming con Flink.
+- [x] Implementar minimo 2 topics Kafka.
+- [x] Documentar 5 jobs streaming con Flink.
 - [x] Documentar 5 jobs batch con Spark.
 - [x] Aplicar tecnicas NLP.
-- [ ] Reportar throughput y latencia promedio.
-- [ ] Mostrar resultados en un dashboard.
+- [x] Reportar throughput, offsets y lag operativo.
+- [x] Mostrar resultados y salud en un dashboard.
 - [ ] Preparar informe y demo en vivo.
 
 La fuente principal sera el **Data Lake Raw de YouTube Live Chat electoral peruano**, actualmente con aproximadamente **160,464 comentarios deduplicados**. Como esos comentarios no tienen labels, se integrara un **dataset externo en espanol etiquetado** para entrenar o validar un modelo base de odio/ofensividad/toxicidad.
@@ -42,55 +45,44 @@ La fuente principal sera el **Data Lake Raw de YouTube Live Chat electoral perua
 
 ```mermaid
 flowchart LR
+    A["YouTube Live Chat<br/>CSV durable"] --> B["S3 Data Lake Raw"]
 
-    A["YouTube Live Chat<br/>JSON / CSV raw<br/>160,464 comentarios"] --> B["Data Lake Raw<br/>raw/ o S3"]
+    subgraph PRIMARY["EMR_PRIMARY · Kafka antes del cómputo"]
+        C["Producer Lake→Kafka"]
+        D["Kafka KRaft<br/>3 brokers/controllers"]
+        RAW[("raw_youtube_chat")]
+        RESULTS[("nlp_stream_results<br/>alerts_polarization")]
+        C --> D --> RAW
+        D --- RESULTS
+    end
 
-    B --> C["Python Producer<br/>simula streaming<br/>fila por fila"]
-    C --> D["Kafka topic:<br/>raw_youtube_chat"]
-    D --> E["Flink Streaming"]
+    subgraph COMPUTE["EMR_WORKERS"]
+        E["Flink Streaming<br/>5 jobs"]
+        N["Spark batches paralelos<br/>rangos de 1000"]
+    end
 
-    E --> F["Limpieza streaming"]
-    E --> G["Ventanas de conteo<br/>throughput"]
-    E --> H["Palabras clave politicas<br/>terruqueo / fraude / candidatos"]
-    E --> I["Polarizacion por candidato"]
-    E --> J["Alertas de toxicidad"]
+    B --> C
+    RAW --> E
+    RAW --> N
+    E --> RESULTS
+    N --> O["S3 Curated<br/>reglas + OffendES + híbrido"]
+    RESULTS --> M["Dashboard"]
+    O --> M
 
-    F --> K["Kafka topic:<br/>nlp_classified_chat"]
-    G --> K
-    H --> K
-    I --> K
-    J --> L["Kafka topic opcional:<br/>alerts_polarization"]
-
-    K --> M["Dashboard"]
-    L --> M
-
-    B --> N["Spark Batch"]
-    N --> O["Limpieza historica"]
-    N --> P["EDA historico<br/>frecuencias / tendencias / spam"]
-    N --> Q["Inferencia batch<br/>clasificar comentarios peruanos"]
-    N --> R["Agregados historicos"]
-    N --> S["Metricas ML<br/>accuracy / precision / recall / F1"]
-
-    Q --> M
-    R --> M
-    S --> M
-
-    T["Dataset externo etiquetado<br/>OffendES / Hate Speech / NewsCom-TOX"] --> U["Spark ML Training"]
-    U --> V["Modelo base NLP<br/>odio / ofensividad / toxicidad"]
-    V --> Q
-    V --> E
-
-    W["Reglas locales peruanas<br/>terruco, caviar, rojo,<br/>fraude, ONPE, JNE,<br/>Keiko, Fujimori, JP, FP"] --> E
-    W --> Q
+    T["Dataset externo etiquetado<br/>OffendES"] --> U["Entrenamiento Spark ML offline"]
+    U --> V["Modelos en S3"]
+    V --> N
+    W["Reglas locales peruanas"] --> E
+    W --> N
 ```
 
 Explicacion corta:
 
 - El **Data Lake Raw** conserva la data original.
-- El **Python Producer** no crea data nueva: solo simula un stream leyendo el CSV raw.
-- **Kafka** transporta comentarios como eventos.
-- **Flink** procesa eventos en tiempo real.
-- **Spark** analiza todo el historico y entrena/aplica modelos.
+- El **Python Producer** corre en `EMR_PRIMARY` y publica cada fila del Lake en Kafka.
+- **Kafka** es el bus central y anterior a todo procesamiento; Flink y Spark consumen el mismo topic raw de forma independiente.
+- **Flink** procesa eventos en tiempo real y devuelve sus resultados a topics Kafka.
+- **Spark** procesa bloques completos y disjuntos desde Kafka, aplicando modelos ya almacenados en S3.
 - El **dataset externo etiquetado** se usa para entrenar porque el dataset peruano aun no tiene labels.
 - Las **reglas peruanas** complementan el modelo porque los datasets externos no necesariamente entienden terminos locales como terruqueo, ONPE, JNE, FP, JP o nombres de candidatos.
 
@@ -106,7 +98,7 @@ Estado: este bloque ya esta avanzado.
 - [x] Deduplicar comentarios repetidos exactos o casi exactos.
 - [x] Llegar a un volumen usable para Big Data: aproximadamente 160,464 comentarios.
 - [ ] Documentar lista de videos/lives usados.
-- [ ] Guardar metadata por fuente: `source_file`, `video_id`, titulo del video, fecha, duracion, tema politico.
+- [x] Guardar metadata disponible por fuente: `source_file`, `video_id`, timestamps, autor y posición; título/tema quedan como enriquecimiento opcional.
 - [ ] Separar carpetas:
   - [ ] `data/raw/live_chat_json/`
   - [ ] `data/raw/csv/`
@@ -173,7 +165,7 @@ El documento pide minimo 2 topics Kafka.
 
 Topics principales:
 
-- [ ] `raw_youtube_chat`
+- [x] `raw_youtube_chat`
 - [ ] `nlp_classified_chat`
 
 Topic opcional:
@@ -803,8 +795,8 @@ Defensa:
 
 ## 16. Checklist final de cumplimiento del documento
 
-- [ ] Fuente de datos declarada.
-- [ ] Fuente de datos justificada.
+- [x] Fuente de datos declarada.
+- [x] Fuente de datos justificada.
 - [ ] Minimo 2 topics Kafka.
 - [x] Tecnicas NLP declaradas.
 - [ ] 5 jobs Flink distintos.

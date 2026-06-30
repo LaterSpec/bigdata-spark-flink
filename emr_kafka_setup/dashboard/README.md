@@ -1,104 +1,124 @@
 # Radar Electoral Streaming Dashboard
 
-Dashboard local para observar el flujo real:
+Dashboard local para operar y observar la arquitectura distribuida:
 
 ```text
-S3 Raw -> Python Producer -> Kafka -> Flink Streaming -> Kafka Results -> Dashboard
+S3 Raw → EMR_PRIMARY [Producer → Kafka KRaft (3 brokers)]
+                                  ├─→ EMR_WORKERS / Flink → Kafka results
+                                  └─→ EMR_WORKERS / Spark → S3 Curated
 ```
 
-## Abrir localmente
+Kafka es el punto de distribución: Flink y Spark consumen `raw_youtube_chat` de forma independiente.
 
-Desde `emr_kafka_setup/dashboard`:
+## Inicio
 
 ```bash
-chmod +x ./start_dashboard.sh ./scripts/*.sh
 ./start_dashboard.sh
 ```
 
-Luego abrir:
+En PowerShell:
 
-```text
-http://127.0.0.1:8787
+```powershell
+.\start_dashboard.ps1
 ```
 
-El arranque local solo sirve el frontend y `server.js`. No conecta a AWS, no descarga datos y no lee snapshots locales. La pagina inicia en cero.
+Abrir `http://127.0.0.1:8787` y pulsar **Conectar AWS**.
 
-## Iniciar streaming en AWS
+## Variables
 
-En la UI pulsa `Conectar AWS`.
+El servidor lee `../../.env`:
 
-El navegador llama al servidor local:
-
-```text
-Browser -> Node local /api/aws/start -> bootstrap_emr_streaming.sh -> SSH -> EMR
+```dotenv
+EMR_PRIMARY=<cluster Kafka>
+EMR_WORKERS=<cluster compute 1>,<cluster compute 2>
+DATA_SIZE=30000
+SPARK_BATCH_SIZE=1000
+SPARK_MAX_CONCURRENCY=1
 ```
 
-Ese endpoint prepara Kafka, recrea los topics de la sesion, inicia los jobs Flink y lanza el producer desde S3. El total sale de `DATA_SIZE` en `.env`; por ejemplo `DATA_SIZE=10000` produce diez mil mensajes:
+## API
+
+| Endpoint | Función |
+|---|---|
+| `POST /api/aws/start` | Acepta el arranque asíncrono; después de un stop confirmado crea una sesión limpia. |
+| `GET /api/aws/start/status` | Progreso y modo `fresh`, `recovery` o `resume` del arranque. |
+| `POST /api/aws/stop` | Cancela y verifica toda la ejecución en `EMR_PRIMARY` y `EMR_WORKERS`; limpia salud y estados. |
+| `GET /api/aws/status` | Offsets raw, `normalized_comments`, total de salidas Flink y threshold Spark elegible. |
+| `GET /api/live-delta` | Eventos incrementales y normalizados entregados por topic y partición. |
+| `POST /api/spark/start` | Agenda un rango Spark sin bloquear la petición; respeta orden y concurrencia. |
+| `GET /api/spark/status` | Agrega estados por batch desde todos los workers. |
+| `GET /api/spark/comments` | Extrae comentarios ofensivos del worker propietario. |
+| `GET /api/pipeline/health` | Salud Kafka, Flink, YARN, Spark y compute. |
+
+## Batches disjuntos
+
+Cada múltiplo de `SPARK_BATCH_SIZE` crea un rango exclusivo:
 
 ```text
---limit $DATA_SIZE --producer-delay-ms 10 --window-seconds 5
+batch_0001000 → row_number 1–1000
+batch_0002000 → row_number 1001–2000
 ```
 
-Despues de conectar, la UI consulta `/api/live-delta` cada 3 segundos. Los contadores, chats, alertas y graficos suben solo con los eventos recibidos durante la sesion actual.
+El scheduler lanza como máximo `SPARK_MAX_CONCURRENCY` batches a la vez. El valor seguro por defecto es `1`; no inicia un rango posterior hasta que el anterior termina correctamente. Los workers se eligen round-robin y el launcher remoto vuelve a aplicar el límite para protegerse de pestañas duplicadas.
 
-El lector de deltas conserva cursor por topic/particion. Si Kafka produce mas rapido que el browser, el dashboard puede quedar con `lag`, pero sigue leyendo en orden y no salta al final del topic.
+Cada `target` debe ser múltiplo de `SPARK_BATCH_SIZE`. El primer job valida que el rango produzca exactamente ese número de filas antes de ejecutar reglas, OffendES y scoring.
 
-## Spark Batch cada 1,000 eventos
+Al conectar o recargar, el frontend agrega primero los estados Spark de todos los workers y solo después calcula thresholds faltantes; así no relanza batches existentes por una carrera de polling.
 
-El dashboard consulta `/api/aws/status` y `/api/spark/status`. Cuando `raw_youtube_chat` alcanza un nuevo multiplo de `SPARK_BATCH_SIZE` (`1000` por defecto), llama `/api/spark/start` y agenda un batch Spark remoto.
+El launcher es idempotente por defecto. Un reproceso manual de un batch terminado o fallido requiere `--force`; un lock activo nunca se sobrescribe.
 
-Cada batch genera rutas S3 separadas por target:
+## Panel de salud
 
-```text
-s3://figuretibucket/output/kafka_to_spark/raw_youtube_chat/batch_0001000/
-s3://figuretibucket/output/batch/from_kafka/batch_0001000/
-```
+El bloque **Salud de la plataforma** aparece al final y muestra:
 
-El estado remoto vive en:
+- Estado de conexión y timestamp. Una sesión activa se presenta como **conectado** con foco verde.
+- Tres brokers, controller líder, ISR y errores.
+- Eventos y tasa por topic.
+- Lag de grupos Flink.
+- Nodos YARN y aplicaciones por compute.
+- Jobs Flink y batches Spark.
+- Acciones de recuperación cuando el diagnóstico técnico detecta degradación.
 
-```text
-/home/hadoop/bigdata-kafka/logs/spark_batch_status.json
-```
+Cadencias:
 
-Jobs ejecutados por batch:
+| Dato | Frecuencia objetivo | Fuente |
+|---|---:|---|
+| Chat RAW y eventos Flink | 3 s | `/api/live-delta` |
+| **Flink normalizados** | 3 s | offsets confirmados de `flink-job1-normalize` |
+| Estados Spark | 3 s | `/api/spark/status` |
+| Inventario Kafka y thresholds | 5 s | `/api/aws/status` |
+| Salud integral | 5 s | `/api/pipeline/health` |
 
-- Job 1: Kafka `raw_youtube_chat` -> parquet S3.
-- Job 2: reglas locales.
-- Job 4: OffendES Spark ML.
-- Job 5: scoring hibrido + agregados.
+Las consultas no se solapan: si SSH tarda más que el intervalo, se espera a que termine la consulta en curso.
 
-## Flujo visual
-
-- `raw_youtube_chat` aparece como chat principal en la parte superior.
-- `Eventos Flink` queda abajo como feed contenido de eventos Flink.
-- `Comentarios filtrados` queda a su costado y muestra nombre, comentario y categoria/tag.
-- El buscador solo filtra `Comentarios filtrados`.
-- `Muestra validada`, `Eventos Flink`, `Alertas` y `Spark Batch` empiezan en `0`.
-- `Spark Batch` permanece en `0` hasta que exista una metrica incremental real.
-- `Spark Batch enrichment` muestra batches de 1,000 eventos, jobs internos y outputs S3.
-- `Flink windows`, `alerts_polarization` y reglas agregan datos de forma acumulada.
-- Si AWS no responde, la pagina queda vacia y muestra el error; no existe fallback local con JSONL llenos.
-
-## Datos locales
-
-`data/runtime/` queda reservado para cache de sesion si se necesita mas adelante. Los JSON/JSONL precargados no forman parte del dashboard streaming puro.
-
-## Scripts utiles
-
-Arranque remoto directo, si quieres probarlo sin la UI:
+## Scripts
 
 ```bash
-./scripts/bootstrap_emr_streaming.sh --producer-delay-ms 10 --window-seconds 5
-```
-
-Detener Kafka, producer y jobs Flink en EMR:
-
-```bash
+./scripts/bootstrap_emr_streaming.sh --limit 2000
+./scripts/pipeline_health_from_aws.sh
+./scripts/spark_status_from_aws.sh
 ./scripts/stop_emr_streaming.sh
 ```
 
-Lectura puntual de deltas remotos:
+El dashboard no usa snapshots falsos como fallback. Cuando AWS no responde, conserva el último estado visible y marca la plataforma como degradada u offline.
 
-```bash
-./scripts/live_delta_from_aws.sh --max-raw 20 --max-flink 20 --max-alerts 10
+Después de reiniciar una sesión local:
+
+```powershell
+.\start_dashboard.ps1
+.\scripts\restart_services_after_session.ps1
 ```
+
+El segundo comando conserva topics y offsets; no debe usarse para solicitar una sesión limpia.
+
+Si Kafka ya está activo pero el producer quedó detenido antes de `DATA_SIZE`, `POST /api/aws/start` usa una reanudación ligera: no redespliega brokers ni espera a `EMR_WORKERS`; continúa desde la siguiente fila pendiente. El diagnóstico de compute se mantiene visible como degradado si el worker no responde.
+
+## Detención total
+
+**Detener plataforma** ejecuta una parada distribuida explícita. La acción:
+
+1. Bloquea nuevos batches y espera a los launchers Spark en curso.
+2. Cancela aplicaciones YARN, drivers Spark y los cinco procesos Flink en todos los `EMR_WORKERS`.
+3. Detiene producer, monitor y los tres brokers de `EMR_PRIMARY`.
+4. Elimina snapshots de salud y estados locales de batches.
+5. Limpia el dashboard y vuelve a habilitar **Conectar AWS** solo si ambos lados confirmaron la parada.

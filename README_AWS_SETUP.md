@@ -1,257 +1,107 @@
-# AWS/S3/EMR Setup - Proyecto Big Data
+# AWS Setup - Kafka, Flink y Spark en EMR
 
-Este archivo documenta la preparacion de S3 y EMR para la fase Spark Batch del proyecto de deteccion de discurso ofensivo, discriminatorio, terruqueo y polarizacion politica en comentarios de YouTube Live Chat electoral peruano.
+## Arquitectura
 
-La fase documentada aqui ya queda como base operativa actual. La nueva arquitectura objetivo del proyecto agrega una capa streaming en AWS con Kafka y Flink, pero esa expansion todavia no se implementa en este documento.
+- `EMR_PRIMARY`: tres instancias dedicadas al quorum Kafka KRaft.
+- `EMR_WORKERS`: uno o más clústeres EMR para Flink y Spark.
+- S3: Raw durable, modelos Spark ML y resultados Curated.
 
-## Contexto local
+El flujo operativo siempre entra primero a `EMR_PRIMARY`: `S3 Raw → producer → Kafka`. Desde `raw_youtube_chat`, Flink y Spark consumen en paralelo en `EMR_WORKERS`; Flink devuelve resultados a Kafka y Spark escribe S3 Curated.
+- Dashboard local: orquestación, streaming visual y salud.
+- Máquina local con Node.js 18+, Git Bash/SSH y PowerShell 7 en Windows.
 
-- Workspace local: `C:\Users\itsma\Documents\BigData\Proyectofinal`
-- Bucket S3: `s3://figuretibucket/`
-- EMR master public DNS: `ec2-100-56-102-9.compute-1.amazonaws.com`
-- Usuario validado para EMR: `hadoop`
-- Llave SSH local: `final.pem`
+Consulta `architecture.md` para los diagramas y decisiones completas.
 
-Nota: en esta maquina Windows, `aws` no estaba disponible en PATH, por eso se uso el flujo alternativo local -> SCP -> EMR -> S3.
+## Recursos requeridos
 
-## Validaciones realizadas
+### EMR_PRIMARY
 
-Validacion local de rutas:
+- Tres instancias `RUNNING`: primary y dos core.
+- Java 8 o superior.
+- IAM del primary con permiso `elasticmapreduce:ListInstances`.
+- Acceso saliente para descargar Kafka 3.6.2.
+- Comunicación privada entre nodos por `9092`, `9093` y SSH.
 
-```powershell
-Get-Item youtube_lake.csv
-Get-Item dataset/train.parquet
-Get-Item dataset/validation.parquet
-Get-Item dataset/test.parquet
-Get-Item local_baseline
-```
+### EMR_WORKERS
 
-Rutas solicitadas que no existian exactamente:
+- EMR con Hadoop, Spark 3.4.1 y Flink 1.17.1.
+- Al menos un primary accesible por SSH.
+- Nodos YARN `RUNNING`.
+- Acceso privado a los brokers Kafka de `EMR_PRIMARY`.
+- Acceso de lectura/escritura al bucket S3.
 
-```text
-dataset/prepared/train.parquet
-dataset/prepared/validation.parquet
-test.parquet
-```
+## S3
 
-Rutas usadas para OffendES:
-
-```text
-dataset/train.parquet
-dataset/validation.parquet
-dataset/test.parquet
-```
-
-Validacion de AWS CLI local:
-
-```powershell
-aws --version
-```
-
-Resultado: `aws` no estaba instalado o no estaba en PATH local.
-
-Validacion de acceso EMR + S3:
-
-```powershell
-ssh -i .\final.pem -o BatchMode=yes -o StrictHostKeyChecking=no hadoop@ec2-100-56-102-9.compute-1.amazonaws.com "hostname; whoami; aws --version; aws s3 ls s3://figuretibucket/"
-```
-
-Resultado confirmado:
-
-```text
-whoami: hadoop
-aws-cli/1.18.147
-s3://figuretibucket/ accesible desde EMR
-```
-
-## Permisos de la llave PEM en Windows
-
-OpenSSH rechazo inicialmente `final.pem` por permisos demasiado abiertos. Se corrigio con:
-
-```powershell
-icacls .\final.pem /inheritance:r /remove:g "LaterSpec\CodexSandboxUsers" /grant:r "LATERSPEC\itsma:R"
-```
-
-## Comandos usados para staging en EMR
-
-Crear staging remoto:
-
-```powershell
-ssh -i .\final.pem -o BatchMode=yes -o StrictHostKeyChecking=no hadoop@ec2-100-56-102-9.compute-1.amazonaws.com "rm -rf /home/hadoop/proyectofinal_s3_upload && mkdir -p /home/hadoop/proyectofinal_s3_upload/dataset /home/hadoop/proyectofinal_s3_upload/baseline"
-```
-
-Empaquetar `local_baseline` sin `.venv` ni caches:
-
-```powershell
-tar -czf local_baseline_s3_upload.tar.gz --exclude='local_baseline/.venv' --exclude='local_baseline/__pycache__' --exclude='local_baseline/*/__pycache__' local_baseline
-```
-
-Copiar archivos al master EMR:
-
-```powershell
-scp -i .\final.pem -o BatchMode=yes -o StrictHostKeyChecking=no .\youtube_lake.csv hadoop@ec2-100-56-102-9.compute-1.amazonaws.com:/home/hadoop/proyectofinal_s3_upload/youtube_lake.csv
-scp -i .\final.pem -o BatchMode=yes -o StrictHostKeyChecking=no .\dataset\train.parquet .\dataset\validation.parquet .\dataset\test.parquet hadoop@ec2-100-56-102-9.compute-1.amazonaws.com:/home/hadoop/proyectofinal_s3_upload/dataset/
-scp -i .\final.pem -o BatchMode=yes -o StrictHostKeyChecking=no .\local_baseline_s3_upload.tar.gz hadoop@ec2-100-56-102-9.compute-1.amazonaws.com:/home/hadoop/proyectofinal_s3_upload/baseline/
-```
-
-## Comandos usados desde EMR hacia S3
-
-Subida de datos principales:
-
-```bash
-aws s3 cp /home/hadoop/proyectofinal_s3_upload/youtube_lake.csv s3://figuretibucket/data/raw/youtube/youtube_lake.csv
-aws s3 cp /home/hadoop/proyectofinal_s3_upload/dataset/train.parquet s3://figuretibucket/dataset/offendES/train.parquet
-aws s3 cp /home/hadoop/proyectofinal_s3_upload/dataset/validation.parquet s3://figuretibucket/dataset/offendES/validation.parquet
-aws s3 cp /home/hadoop/proyectofinal_s3_upload/dataset/test.parquet s3://figuretibucket/dataset/offendES/test.parquet
-```
-
-Subida del baseline:
-
-```bash
-cd /home/hadoop/proyectofinal_s3_upload/baseline
-mkdir -p extracted
-tar -xzf local_baseline_s3_upload.tar.gz -C extracted
-aws s3 sync extracted/local_baseline/ s3://figuretibucket/codes/local_baseline/
-```
-
-Se crearon placeholders `.keep` para prefixes vacios de batch, streaming, logs y carpetas de codigo futuras.
-
-## Estructura final esperada en S3
+Estructura utilizada:
 
 ```text
 s3://figuretibucket/
-  codes/
-    local_baseline/
-      artifacts/
-      data_cache/
-      outputs/
-      reports/
-      README.md
-      peruvian_rules.py
-      requirements.txt
-      run_inference_youtube.py
-      test_peruvian_rules.py
-      train_baseline.py
-      utils.py
-    spark/
-      .keep
-    flink/
-      .keep
-    producer/
-      .keep
-
-  data/
-    raw/
-      youtube/
-        youtube_lake.csv
-    processed/
-      youtube_classified/
-        .keep
-
-  dataset/
-    offendES/
-      train.parquet
-      validation.parquet
-      test.parquet
-
-  output/
-    batch/
-      predictions/
-        .keep
-      aggregates_by_minute/
-        .keep
-      reports/
-        .keep
-    streaming/
-      classified/
-        .keep
-      alerts/
-        .keep
-      metrics/
-        .keep
-
-  logs/
-    emr/
-      .keep
+├── data/raw/youtube/youtube_lake.csv
+└── output/
+    ├── batch/models/
+    │   ├── offendes_binary_sparkml/
+    │   └── offendes_multiclass_sparkml/
+    ├── kafka_to_spark/raw_youtube_chat/<batch_id>/
+    └── batch/from_kafka/<batch_id>/
 ```
 
-## Verificacion realizada en S3 desde EMR
+## Configuración local
+
+```dotenv
+EMR_PRIMARY=ec2-primary.compute-1.amazonaws.com
+EMR_WORKERS=ec2-compute-1.compute-1.amazonaws.com,ec2-compute-2.compute-1.amazonaws.com
+DATA_SIZE=30000
+SPARK_BATCH_SIZE=1000
+SPARK_MAX_CONCURRENCY=1
+```
+
+La llave `final.pem` y `.env` están ignorados por Git.
+
+## Security groups
+
+- SSH `22`: solo desde la máquina autorizada hacia los endpoints públicos.
+- Kafka `9092`: entre security groups Kafka y compute.
+- KRaft controller `9093`: solo entre nodos de `EMR_PRIMARY`.
+- YARN y servicios internos: mantener reglas privadas propias de EMR.
+- No exponer `9092` o `9093` a `0.0.0.0/0`.
+
+## IAM
+
+El perfil de `EMR_PRIMARY` necesita consultar su inventario EMR. Los perfiles compute necesitan leer Raw/modelos y escribir los prefijos de output. No se almacenan claves AWS en scripts.
+
+## Despliegue y arranque
 
 ```bash
-aws s3 ls s3://figuretibucket/
-aws s3 ls s3://figuretibucket/data/raw/youtube/
-aws s3 ls s3://figuretibucket/dataset/offendES/
-aws s3 ls s3://figuretibucket/codes/local_baseline/
-aws s3 ls s3://figuretibucket/codes/local_baseline/artifacts/
-aws s3 ls s3://figuretibucket/output/batch/
-aws s3 ls s3://figuretibucket/output/streaming/
-aws s3 ls s3://figuretibucket/logs/emr/
+cd emr_kafka_setup/dashboard
+./scripts/bootstrap_emr_streaming.sh
 ```
 
-Archivos clave confirmados:
+El script descubre nodos, configura brokers, despliega código desde el repositorio local, compila Flink e inicia producer y monitor.
 
-```text
-s3://figuretibucket/data/raw/youtube/youtube_lake.csv
-s3://figuretibucket/dataset/offendES/train.parquet
-s3://figuretibucket/dataset/offendES/validation.parquet
-s3://figuretibucket/dataset/offendES/test.parquet
-s3://figuretibucket/codes/local_baseline/artifacts/binary_model.joblib
-s3://figuretibucket/codes/local_baseline/artifacts/multiclass_model.joblib
-s3://figuretibucket/codes/local_baseline/artifacts/vectorizer_binary.joblib
-s3://figuretibucket/codes/local_baseline/artifacts/vectorizer_multiclass.joblib
-```
-
-Conteo confirmado para `codes/local_baseline/`:
-
-```text
-33 objetos
-```
-
-## Comandos alternativos recomendados
-
-Si AWS CLI se instala localmente en Windows, se puede subir directamente:
-
-```powershell
-aws s3 cp .\youtube_lake.csv s3://figuretibucket/data/raw/youtube/youtube_lake.csv
-aws s3 cp .\dataset\train.parquet s3://figuretibucket/dataset/offendES/train.parquet
-aws s3 cp .\dataset\validation.parquet s3://figuretibucket/dataset/offendES/validation.parquet
-aws s3 cp .\dataset\test.parquet s3://figuretibucket/dataset/offendES/test.parquet
-aws s3 sync .\local_baseline\ s3://figuretibucket/codes/local_baseline/ --exclude ".venv/*" --exclude "__pycache__/*"
-```
-
-Si se mantiene el flujo por EMR:
-
-```powershell
-scp -i .\final.pem .\archivo_local hadoop@ec2-100-56-102-9.compute-1.amazonaws.com:/home/hadoop/
-ssh -i .\final.pem hadoop@ec2-100-56-102-9.compute-1.amazonaws.com
-aws s3 cp /home/hadoop/archivo_local s3://figuretibucket/ruta/destino/
-```
-
-## Como conectarse al EMR
-
-```powershell
-ssh -i .\final.pem hadoop@ec2-100-56-102-9.compute-1.amazonaws.com
-```
-
-Verificar S3 desde EMR:
+La vía recomendada para operación normal es levantar `start_dashboard.ps1` o `start_dashboard.sh`, abrir `http://127.0.0.1:8787` y pulsar **Conectar AWS**. Tras reiniciar una sesión sin querer borrar offsets:
 
 ```bash
-aws s3 ls s3://figuretibucket/
-aws s3 ls s3://figuretibucket/data/raw/youtube/
-aws s3 ls s3://figuretibucket/dataset/offendES/
+./scripts/restart_services_after_session.sh
 ```
 
-## Advertencia de costos
+## Validación
 
-Apagar o terminar el cluster EMR cuando no se este usando. Mantener 1 master + 2 workers encendidos puede generar costos mientras el cluster siga vivo, incluso si no hay jobs Spark corriendo.
+```bash
+./scripts/pipeline_health_from_aws.sh
+./scripts/aws_status_from_aws.sh --data-size 30000 --spark-batch-size 1000
+./scripts/spark_status_from_aws.sh
+```
 
-## Siguiente paso
+Los criterios de aceptación son quorum `3/3`, ISR completo, cinco jobs Flink y todos los workers con YARN activo.
 
-El siguiente paso ya no es Spark Batch, porque esa fase quedo completada. A partir de esta base, la continuacion recomendada en AWS es:
+## Costos y apagado
 
-1. Definir la topologia de Kafka en AWS.
-2. Elegir el servicio de Kafka administrado o autogestionado.
-3. Definir topics, particiones, retencion y seguridad.
-4. Diseñar la integracion futura entre producer, Kafka, Flink, S3 y dashboard.
+Detener procesos no termina instancias:
 
-Referencia principal para esa nueva etapa: `architecture.md`.
+```bash
+./scripts/stop_emr_streaming.sh
+```
+
+La parada abarca ambos tipos de clúster: cancela YARN/Flink/Spark en compute, detiene producer/monitor/Kafka en primary y limpia el estado operativo de salud y batches.
+
+Cuando finalicen las pruebas, termina manualmente ambos tipos de clúster EMR para detener cargos. S3 conserva los artefactos.

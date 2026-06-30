@@ -16,20 +16,24 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.TopicPartition;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
@@ -47,6 +51,7 @@ public class FlinkKafkaStreamingJobs {
         String bootstrap = DEFAULT_BOOTSTRAP;
         String inputTopic = RAW_TOPIC;
         String outputTopic = RESULTS_TOPIC;
+        String groupId = "";
         int maxMessages = 105;
         int idleMs = 3000;
         int delayMs = 10;
@@ -61,6 +66,7 @@ public class FlinkKafkaStreamingJobs {
                 else if ("--bootstrap-server".equals(k)) { args.bootstrap = v; i++; }
                 else if ("--input-topic".equals(k)) { args.inputTopic = v; i++; }
                 else if ("--output-topic".equals(k)) { args.outputTopic = v; i++; }
+                else if ("--group-id".equals(k)) { args.groupId = v; i++; }
                 else if ("--max-messages".equals(k)) { args.maxMessages = Integer.parseInt(v); i++; }
                 else if ("--idle-ms".equals(k)) { args.idleMs = Integer.parseInt(v); i++; }
                 else if ("--delay-ms".equals(k)) { args.delayMs = Integer.parseInt(v); i++; }
@@ -127,11 +133,13 @@ public class FlinkKafkaStreamingJobs {
         private final int maxMessages;
         private final int idleMs;
         private final int delayMs;
+        private final String groupId;
         private volatile boolean running = true;
 
-        KafkaRawSource(String bootstrap, String topic, int maxMessages, int idleMs, int delayMs) {
+        KafkaRawSource(String bootstrap, String topic, String groupId, int maxMessages, int idleMs, int delayMs) {
             this.bootstrap = bootstrap;
             this.topic = topic;
+            this.groupId = groupId;
             this.maxMessages = maxMessages;
             this.idleMs = idleMs;
             this.delayMs = delayMs;
@@ -140,7 +148,7 @@ public class FlinkKafkaStreamingJobs {
         public void run(SourceContext<RawEvent> ctx) throws Exception {
             Properties props = new Properties();
             props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
-            props.put(ConsumerConfig.GROUP_ID_CONFIG, "flink-demo-" + UUID.randomUUID());
+            props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId.isEmpty() ? "flink-demo-" + UUID.randomUUID() : groupId);
             props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
@@ -157,10 +165,15 @@ public class FlinkKafkaStreamingJobs {
                         continue;
                     }
                     lastDataAt = System.currentTimeMillis();
+                    Map<TopicPartition, OffsetAndMetadata> processedOffsets = new HashMap<TopicPartition, OffsetAndMetadata>();
                     for (ConsumerRecord<String, String> r : records) {
                         synchronized (ctx.getCheckpointLock()) {
                             ctx.collect(new RawEvent(r.value(), r.topic(), r.partition(), r.offset(), r.timestamp()));
                         }
+                        processedOffsets.put(
+                            new TopicPartition(r.topic(), r.partition()),
+                            new OffsetAndMetadata(r.offset() + 1)
+                        );
                         seen++;
                         if (delayMs > 0) Thread.sleep(delayMs);
                         if (maxMessages > 0 && seen >= maxMessages) {
@@ -168,6 +181,7 @@ public class FlinkKafkaStreamingJobs {
                             break;
                         }
                     }
+                    if (!processedOffsets.isEmpty()) consumer.commitSync(processedOffsets);
                 }
             } finally {
                 consumer.close();
@@ -323,7 +337,7 @@ public class FlinkKafkaStreamingJobs {
     }
 
     static void job1(Args args, StreamExecutionEnvironment env) throws Exception {
-        env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.maxMessages, args.idleMs, args.delayMs))
+        env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.groupId, args.maxMessages, args.idleMs, args.delayMs))
             .name("Kafka raw_youtube_chat source")
             .map(new MapFunction<RawEvent, String>() { public String map(RawEvent e) { return normalizedOutput(e); }})
             .name("Normalize comment")
@@ -332,7 +346,7 @@ public class FlinkKafkaStreamingJobs {
     }
 
     static void job2(Args args, StreamExecutionEnvironment env) throws Exception {
-        DataStream<String> out = env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.maxMessages, args.idleMs, args.delayMs))
+        DataStream<String> out = env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.groupId, args.maxMessages, args.idleMs, args.delayMs))
             .map(new MapFunction<RawEvent, Metric>() {
                 public Metric map(RawEvent e) {
                     Metric m = new Metric();
@@ -365,14 +379,14 @@ public class FlinkKafkaStreamingJobs {
     }
 
     static void job3(Args args, StreamExecutionEnvironment env) throws Exception {
-        env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.maxMessages, args.idleMs, args.delayMs))
+        env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.groupId, args.maxMessages, args.idleMs, args.delayMs))
             .map(new MapFunction<RawEvent, String>() { public String map(RawEvent e) { return rulesOutput(e); }})
             .addSink(new KafkaJsonSink(args.bootstrap, args.outputTopic));
         env.execute("Flink Job 3 - Deteccion de senales politicas");
     }
 
     static void job4(Args args, StreamExecutionEnvironment env) throws Exception {
-        env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.maxMessages, args.idleMs, args.delayMs))
+        env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.groupId, args.maxMessages, args.idleMs, args.delayMs))
             .flatMap(new FlatMapFunction<RawEvent, ActorMetric>() {
                 public void flatMap(RawEvent e, Collector<ActorMetric> out) {
                     RuleResult r = rules(e);
@@ -404,7 +418,7 @@ public class FlinkKafkaStreamingJobs {
     }
 
     static void job5(Args args, StreamExecutionEnvironment env) throws Exception {
-        env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.maxMessages, args.idleMs, args.delayMs))
+        env.addSource(new KafkaRawSource(args.bootstrap, args.inputTopic, args.groupId, args.maxMessages, args.idleMs, args.delayMs))
             .flatMap(new FlatMapFunction<RawEvent, String>() {
                 public void flatMap(RawEvent e, Collector<String> out) {
                     RuleResult r = rules(e);
@@ -429,4 +443,3 @@ public class FlinkKafkaStreamingJobs {
         else throw new IllegalArgumentException("Unknown --job: " + args.job);
     }
 }
-

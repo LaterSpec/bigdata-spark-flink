@@ -1,19 +1,23 @@
 # Flink Streaming Full Report
 
+> Actualización operativa 2026-06-30: los cinco jobs están integrados al arranque distribuido. El dashboard calcula **Flink normalizados** desde los offsets confirmados de `flink-job1-normalize` cada 3 segundos y presenta la sesión activa como **conectado**.
+
+> **Evidencia histórica con runtime actualizado:** las métricas originales se conservan; el despliegue vigente mueve Flink a `EMR_WORKERS` y Kafka a un quorum KRaft de tres brokers.
+
 Fecha de validacion: 2026-06-17 UTC
 
-## Arquitectura validada
+## Arquitectura validada en la fase histórica
 
 Kafka `raw_youtube_chat` -> Flink Streaming -> Kafka `nlp_stream_results` / Kafka `alerts_polarization` -> Dashboard futuro.
 
-Este bloque complementa la arquitectura del proyecto:
+La arquitectura vigente conserva el comportamiento validado, pero lo despliega en capas separadas:
 
-S3 Raw -> Python Producer -> Kafka -> Spark Batch / Flink Streaming -> S3 Curated / Kafka Results -> Dashboard.
+S3 Raw -> Producer en EMR_PRIMARY -> Kafka KRaft -> Flink y Spark en EMR_WORKERS -> Kafka Results / S3 Curated -> Dashboard.
 
 ## Entorno EMR
 
-- Nodo master: `ip-172-31-14-56`
-- Kafka: `/home/hadoop/kafka`, version 3.6.2, modo KRaft single-node
+- Nodo de la prueba histórica: `ip-172-31-14-56`
+- Kafka de la prueba histórica: `/home/hadoop/kafka`, versión 3.6.2, modo KRaft single-node
 - Proyecto: `/home/hadoop/bigdata-kafka`
 - Flink: `1.17.1-amzn-1`
 - Java: `OpenJDK 1.8.0_492`
@@ -249,12 +253,14 @@ timeout 20s /home/hadoop/kafka/bin/kafka-console-consumer.sh --bootstrap-server 
 
 ## Limitaciones
 
-- Kafka es self-managed en el master EMR por restriccion de AWS Academy; no es una arquitectura productiva equivalente a Amazon MSK.
+- La medición histórica usó Kafka single-node. El runtime vigente usa tres brokers/controllers en `EMR_PRIMARY`; se conserva Kafka self-managed por la restricción académica de AWS Academy.
 - La validacion uso una muestra pequena de 105 mensajes, no el dataset completo de 160,464 comentarios.
 - Flink ejecuta reglas rapidas de baja latencia; el NLP pesado y el modelo OffendES se mantienen en Spark Batch.
 - El dashboard queda como siguiente fase.
 - OffendES y las reglas locales son senales analiticas, no verdad final sobre intencion politica o toxicidad.
 
-## Proximo paso
+## Estado posterior
+
+Kafka distribuido, Spark por rangos, dashboard y salud integral ya fueron implementados. Este documento conserva la evidencia detallada de la fase Flink.
 
 Conectar un dashboard o consumidor operativo a `nlp_stream_results` y `alerts_polarization`, y luego ejecutar una prueba mayor controlada con 1000 mensajes antes de considerar una corrida completa.

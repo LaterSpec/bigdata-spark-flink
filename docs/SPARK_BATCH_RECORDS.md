@@ -1,5 +1,7 @@
 # Spark Batch Records - Proyecto Big Data
 
+> **Evidencia histórica:** los resultados de esta fase no se reescriben. Los batches actuales son rangos disjuntos ejecutados sobre `EMR_WORKERS`; consulta `architecture.md`.
+
 ## 1. Objetivo de la fase Spark Batch
 
 Esta fase implementa y documenta el procesamiento historico del proyecto **Deteccion y analisis del discurso discriminatorio y polarizacion politica en redes sociales usando Big Data**.
@@ -326,7 +328,7 @@ Interpretacion:
 
 La fase Spark Batch queda completada. Se implemento procesamiento historico real sobre S3/EMR/Spark, reglas locales multilabel, agregados por minuto, entrenamiento NLP distribuido con OffendES, inferencia sobre 160,464 comentarios y scoring hibrido explicable.
 
-Queda pendiente:
+Al cerrar esta fase histórica quedaba pendiente:
 
 - Diseno e implementacion de Kafka en AWS.
 - Kafka.
@@ -334,7 +336,9 @@ Queda pendiente:
 - Dashboard.
 - Informe final.
 
-La referencia arquitectonica para la siguiente etapa ya no es este documento, sino `architecture.md`, donde se define la evolucion a una arquitectura hibrida S3 + EMR + Kafka + Flink en AWS.
+La referencia arquitectónica vigente ya no es este documento, sino `architecture.md`, donde se define la plataforma implementada S3 + Kafka en `EMR_PRIMARY` + Flink/Spark en `EMR_WORKERS`.
+
+Estado vigente: Kafka distribuido, Flink y dashboard ya fueron implementados y validados; consulta `docs/DISTRIBUTED_RUNTIME_VALIDATION.md`.
 
 ## 15. Checklist final
 
@@ -344,8 +348,13 @@ La referencia arquitectonica para la siguiente etapa ya no es este documento, si
 - [x] Spark ML training
 - [x] Spark ML inference
 - [x] Hybrid scoring
+- [x] Kafka KRaft distribuido
+- [x] Cinco jobs Flink streaming
+- [x] Dashboard operativo y salud integral
+- [x] Batches Kafka→Spark disjuntos y secuenciales por defecto
+- [x] Informe final LaTeX en `doc/`
 - [x] 5 jobs Spark Batch documentados
-- [ ] Kafka
-- [ ] Flink
-- [ ] Dashboard
+- [x] Kafka (completado en la fase distribuida posterior)
+- [x] Flink (completado en la fase distribuida posterior)
+- [x] Dashboard (completado en la fase distribuida posterior)
 - [ ] Informe final
