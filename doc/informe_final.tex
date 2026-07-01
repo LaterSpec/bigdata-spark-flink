@@ -498,6 +498,70 @@ El estado principal usa tres situaciones:
 
 Una condición técnica degradada no cambia el encabezado a ``desconectado'': se conserva en las acciones de diagnóstico. Si Kafka deja de responder, el último estado válido permanece visible y la plataforma nunca se reinicia automáticamente.
 
+\chapter{Capturas del dashboard en operación}
+
+Este capítulo documenta la interfaz web durante una sesión activa sobre AWS. Las capturas corresponden a una corrida con más de 75\,000 comentarios ingeridos desde Kafka y tres batches Spark completados. Cada figura ilustra una capa distinta del plano de observabilidad: visión global del pipeline, streaming Flink con reglas y procesamiento batch con ML.
+
+\section{Vista general y chat en vivo}
+
+La primera captura muestra la pantalla principal del \emph{Radar electoral de comentarios en vivo}. En la cabecera se resume la ruta de datos \texttt{S3 RAW $\rightarrow$ EMR\_PRIMARY / KAFKA $\rightarrow$ EMR\_WORKERS / FLINK + SPARK} y los controles operativos: pausar la cinta de reproducción, detener la plataforma y el indicador de sesión \statusok{}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{images/dashboard_vista_general.png}
+  \caption{Vista general del dashboard con chat Kafka en vivo, contadores de topics y tarjetas de KPI.}
+  \label{fig:dashboard-vista-general}
+\end{figure}
+
+El panel izquierdo confirma que Kafka está activo e informa los offsets acumulados de \topic{raw\_youtube\_chat} (75\,426), \topic{normalized\_comments} (75\,426) y \topic{alerts\_polarization} (1\,818). El panel derecho, titulado \emph{Chat Kafka en vivo}, despliega el feed RAW con autor y texto de cada comentario electoral peruano.
+
+Las cuatro tarjetas inferiores sintetizan el progreso del pipeline:
+\begin{itemize}
+  \item \textbf{Muestra validada}: total de mensajes publicados en Kafka y visibles para Flink y Spark.
+  \item \textbf{Flink normalizados}: un resultado principal por comentario, alineado con el offset confirmado del job~1.
+  \item \textbf{Alertas}: eventos emitidos en \topic{alerts\_polarization} por el job Flink~5.
+  \item \textbf{Spark batch}: filas ya curadas en S3 a partir de rangos disjuntos de 1\,000 eventos (3\,000 en esta sesión).
+\end{itemize}
+
+La barra inferior permite filtrar mensajes procesados por palabras clave (\emph{ONPE}, \emph{terruqueo}, \emph{Keiko}, etc.), conectando la observabilidad en tiempo real con el análisis cualitativo del corpus.
+
+\section{Eventos Flink y comentarios filtrados por reglas}
+
+La segunda captura divide la pantalla en dos flujos complementarios del procesamiento streaming.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{images/dashboard_flink_reglas.png}
+  \caption{Panel de eventos Flink normalizados (izquierda) y comentarios filtrados por reglas y etiquetas (derecha).}
+  \label{fig:dashboard-flink-reglas}
+\end{figure}
+
+En el panel \emph{Eventos Flink en vivo} (etiqueta \texttt{aws delta}) aparecen salidas del job \topic{flink\_job1\_normalize\_stream}. Cada tarjeta conserva el texto normalizado y la etiqueta \topic{normalized\_comment}, evidenciando la capa de ingestión de baja latencia antes de aplicar lógica política.
+
+El panel \emph{Comentarios filtrados} (\texttt{RULES + TAGS}) muestra coincidencias del motor de reglas locales. Los registros provienen de reglas por actor (\topic{keiko\_fujimori\_fp}) y exponen categorías detectadas: \topic{risk\_alert}, \topic{political\_mention}, \topic{terruqueo}, \topic{electoral\_institution}, \topic{fraude}, \topic{general\_insult} y \topic{ethnic\_racial\_slur}. El contador \emph{48 match} resume cuántos comentarios del subconjunto visible activaron al menos una regla explicable, sin depender del modelo ML.
+
+Esta vista demuestra la trazabilidad entre normalización streaming y señales interpretables del contexto electoral peruano.
+
+\section{Procesamiento Spark batch y filtrado ML}
+
+La tercera captura corresponde al módulo \emph{Spark Batch Enrichment}, donde el dashboard supervisa batches de 1\,000 eventos y la inferencia OffendES sobre cada rango completado.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{images/dashboard_spark_batch.png}
+  \caption{Cuadrícula de batches Spark con sub-jobs por rango y panel lateral de comentarios ofensivos detectados por ML.}
+  \label{fig:dashboard-spark-batch}
+\end{figure}
+
+La cabecera resume \textbf{RAW visto} (82\,929), \textbf{DATA SIZE} (100\,000), \textbf{BATCH SIZE} (1\,000) y \textbf{Activos / límite} (1/1), coherente con \topic{SPARK\_MAX\_CONCURRENCY=1}. La cuadrícula central muestra el ciclo de vida de cada batch:
+\begin{itemize}
+  \item \textbf{done} (verde): \topic{batch\_0001000} a \topic{batch\_0003000} finalizaron los cuatro sub-jobs (\topic{job1 raw from kafka}, \topic{job2 rules}, \topic{job4 offendes}, \topic{job5 hybrid}) y escribieron Parquet en rutas S3 exclusivas.
+  \item \textbf{running} (amarillo): \topic{batch\_0004000} ejecuta el scoring híbrido y agregados.
+  \item \textbf{pending} (gris): batches posteriores esperan que Kafka complete el rango de \topic{row\_number} correspondiente.
+\end{itemize}
+
+El panel lateral \emph{Spark ML filtered: Comentarios ofensivos} lista predicciones del job~4 para \topic{batch\_0001000}: usuario, texto, categoría (\emph{ofensivo\_directo}), confianza (p.\,ej.\ 91{,}9\,\%) y etiquetas de riesgo (\emph{medio}, \emph{alto}, \emph{ofensivo}, \emph{electoral\_institution}, \emph{fraude}). El resumen indica 300 comentarios ofensivos filtrados en ese batch, ilustrando cómo el dashboard cruza progreso operativo batch con evidencia cualitativa del modelo supervisado.
+
 \chapter{Conclusiones}
 
 \begin{enumerate}
