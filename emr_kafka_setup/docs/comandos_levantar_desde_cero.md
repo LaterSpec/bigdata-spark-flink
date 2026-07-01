@@ -1,6 +1,15 @@
 # Comandos operativos en EMR
 
-La orquestación se ejecuta desde la máquina local porque necesita acceder al primary y saltar hacia los core nodes Kafka.
+## Setupeo
+
+- **`EMR_PRIMARY`**: Kafka KRaft (3 nodos), producer Python y monitor. Kafka **no** se instala en los workers.
+- **`EMR_WORKERS`**: Flink (5 jobs) y Spark batch. Se conectan al bootstrap `9092` del primary por red privada.
+
+La orquestación se ejecuta desde la máquina local porque necesita SSH al primary y salto hacia los core nodes Kafka.
+
+Runbook completo: [docs/comandos_levantar_desde_cero.md](../../docs/comandos_levantar_desde_cero.md).
+
+## Arranque
 
 ```bash
 cd emr_kafka_setup/dashboard
@@ -38,4 +47,3 @@ DATA_SIZE=30000
 SPARK_BATCH_SIZE=1000
 ```
 
-Consulta el runbook completo en `docs/comandos_levantar_desde_cero.md` de la raíz.

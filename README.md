@@ -4,6 +4,19 @@ Plataforma distribuida para analizar comentarios de YouTube Live Chat electoral 
 
 **Repositorio:** [github.com/LaterSpec/bigdata-spark-flink](https://github.com/LaterSpec/bigdata-spark-flink)
 
+## Setupeo de clústeres
+
+La plataforma usa **dos tipos de clúster EMR** con roles fijos:
+
+| Clúster | Qué corre ahí | Notas |
+|---|---|---|
+| `EMR_PRIMARY` | **Kafka KRaft**, producer Python, monitor | Tres instancias (`primary` + 2 core). Los tres nodos son broker y controller. Kafka **no** va en los workers. |
+| `EMR_WORKERS` | **Flink** (5 jobs) y **Spark** (batches) | Uno o más endpoints EMR separados por comas. Flink se despliega en el primer worker; Spark se reparte round-robin. |
+
+Flujo resumido: `S3 Raw → producer (primary) → Kafka (primary) → Flink/Spark (workers)`.
+
+La explicación completa está en [architecture.md](architecture.md). El runbook de comandos está en [docs/comandos_levantar_desde_cero.md](docs/comandos_levantar_desde_cero.md).
+
 ## Arquitectura vigente
 
 ```mermaid
@@ -45,17 +58,13 @@ flowchart LR
     S3C --> D
 ```
 
-- `EMR_PRIMARY` identifica el clúster dedicado a Kafka. Sus tres nodos ejecutan un quorum KRaft con replicación `3` y `min.insync.replicas=2`.
-- `EMR_WORKERS` acepta uno o más endpoints públicos de clústeres EMR separados por comas.
-- El primer worker ejecuta Flink. Todos los workers reciben batches Spark por round-robin.
-- Kafka es el punto de distribución anterior a ambos motores: Flink y Spark consumen `raw_youtube_chat` de forma independiente.
-- `SPARK_BATCH_SIZE` define rangos independientes y `SPARK_MAX_CONCURRENCY=1` mantiene una cola secuencial segura por defecto.
+- `EMR_PRIMARY` concentra el bus de eventos: quorum Kafka de tres nodos, replicación `3` y `min.insync.replicas=2`.
+- `EMR_WORKERS` concentra el cómputo: Flink y Spark consumen `raw_youtube_chat` desde Kafka en el primary.
+- `SPARK_BATCH_SIZE` define rangos disjuntos de 1,000 eventos; `SPARK_MAX_CONCURRENCY=1` mantiene una cola secuencial segura por defecto.
 
-La explicación completa está en [architecture.md](architecture.md).
+## Configuración local
 
-## Configuración
-
-El archivo local `.env` no se versiona:
+Crea un `.env` en la raíz del repo (no se versiona):
 
 ```dotenv
 EMR_PRIMARY=ec2-xx-xx-xx-xx.compute-1.amazonaws.com
@@ -65,44 +74,96 @@ SPARK_BATCH_SIZE=1000
 SPARK_MAX_CONCURRENCY=1
 ```
 
-`final.pem` también permanece únicamente en la máquina local. El acceso a los core nodes Kafka usa SSH con salto por `EMR_PRIMARY`; la llave nunca se copia a AWS.
+También necesitas `final.pem` en la raíz. La llave **no** se copia a AWS; el acceso a los core nodes Kafka usa SSH con salto por `EMR_PRIMARY`.
 
-## Inicio
+## Comandos esenciales
 
-Desde Git Bash, macOS o Linux:
+### 1. Levantar el dashboard (plano de control local)
+
+Git Bash, macOS o Linux:
 
 ```bash
 cd emr_kafka_setup/dashboard
 ./start_dashboard.sh
 ```
 
-En Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 cd emr_kafka_setup\dashboard
 .\start_dashboard.ps1
 ```
 
-Abrir `http://127.0.0.1:8787` y pulsar **Conectar AWS**. El arranque descubre los nodos, reinicializa Kafka cuando corresponde, despliega Flink en compute, inicia el monitor y publica desde S3.
+Abrir `http://127.0.0.1:8787` y pulsar **Conectar AWS**. El bootstrap descubre nodos, prepara Kafka en el primary, despliega Flink/Spark en workers, inicia monitor y publica desde S3.
 
-**Detener plataforma** detiene `EMR_PRIMARY` y todos los `EMR_WORKERS`: cancela aplicaciones YARN, procesos Flink/Spark, producer, monitor y los tres brokers. También limpia los estados de batch y salud; **Conectar AWS** vuelve a habilitarse únicamente tras confirmar la parada completa.
+### 2. Bootstrap directo (sin dashboard)
 
-El dashboard consulta deltas cada `3 s`, estados Spark cada `3 s`, offsets agregados cada `5 s` y salud cada `5 s`. **Flink normalizados** usa el offset confirmado del grupo `flink-job1-normalize`; por eso representa comentarios realmente procesados y nunca mensajes repetidos por una recarga del navegador.
+Desde `emr_kafka_setup/dashboard`:
 
-Tras reiniciar una sesión local, vuelve a ejecutar `start_dashboard.ps1` o `start_dashboard.sh`. Para reanudar los servicios remotos conservando topics y offsets:
+```bash
+./scripts/bootstrap_emr_streaming.sh
+```
+
+Sesión limpia (reinicia topics y offsets):
+
+```bash
+./scripts/bootstrap_emr_streaming.sh --reset-topics
+```
+
+Prueba controlada de 2,000 eventos / 2 batches:
+
+```bash
+./scripts/bootstrap_emr_streaming.sh --limit 2000 --producer-delay-ms 10
+```
+
+### 3. Validar la plataforma
+
+```bash
+./scripts/aws_status_from_aws.sh --data-size 30000 --spark-batch-size 1000
+./scripts/spark_status_from_aws.sh
+./scripts/pipeline_health_from_aws.sh
+```
+
+En el primary (Kafka):
+
+```bash
+ssh -i final.pem hadoop@$EMR_PRIMARY \
+  "/home/hadoop/kafka/bin/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 describe --status"
+```
+
+### 4. Detener servicios
+
+```bash
+./scripts/stop_emr_streaming.sh
+```
+
+Cancela YARN/Flink/Spark en workers, detiene producer/monitor/brokers en el primary y limpia estados operativos. **Detener plataforma** en el dashboard ejecuta el mismo stop.
+
+### 5. Reiniciar tras cerrar la terminal local
+
+Solo dashboard:
+
+```bash
+cd emr_kafka_setup/dashboard && ./start_dashboard.sh
+```
+
+Restaurar servicios remotos conservando topics y offsets:
 
 ```bash
 ./emr_kafka_setup/dashboard/scripts/restart_services_after_session.sh
 ```
 
-## Operación
+## Dashboard
+
+El panel consulta deltas cada `3 s`, estados Spark cada `3 s`, offsets Kafka cada `5 s` y salud cada `5 s`. **Flink normalizados** usa el offset confirmado del grupo `flink-job1-normalize`, no mensajes visuales repetidos al recargar el navegador.
+
+## Documentación
 
 - [Comandos desde cero](docs/comandos_levantar_desde_cero.md)
+- [Setup AWS](README_AWS_SETUP.md)
 - [Recuperación desde S3](docs/revivir_emr_desde_s3.md)
 - [Dashboard y API](emr_kafka_setup/dashboard/README.md)
 - [Validación distribuida](docs/DISTRIBUTED_RUNTIME_VALIDATION.md)
 - [Arquitectura Kafka](emr_kafka_setup/docs/kafka_setup_report.md)
 - [Flink streaming](emr_kafka_setup/docs/flink_jobs.md)
 - [Spark desde Kafka](emr_kafka_setup/docs/spark_batch_from_kafka_full_report.md)
-
-Los planes de Spark Batch, pruebas y reportes de modelos se conservan como evidencia histórica. Cuando contradigan esta página, prevalece la arquitectura vigente.

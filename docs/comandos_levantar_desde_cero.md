@@ -1,6 +1,56 @@
 # Levantar la plataforma desde cero
 
-Este es el runbook canónico para la arquitectura distribuida vigente. Los comandos antiguos que ejecutaban Kafka, Flink y Spark en el mismo primary ya no aplican.
+Runbook canónico para la arquitectura distribuida vigente.
+
+## 0. Setupeo: qué va en cada clúster
+
+Antes de ejecutar comandos, crea **dos clústeres EMR** (o más workers) con estos roles:
+
+### EMR_PRIMARY — Kafka y entrada de datos
+
+En este clúster **solo** corre el bus de eventos y la ingesta:
+
+| Componente | Ubicación | Puerto |
+|---|---|---|
+| Kafka broker/controller (nodo 1) | instancia primary | 9092 (clientes), 9093 (KRaft) |
+| Kafka broker/controller (nodo 2) | core node 1 | 9092, 9093 |
+| Kafka broker/controller (nodo 3) | core node 2 | 9092, 9093 |
+| Producer Python (`produce_youtube_chat_from_s3.py`) | primary | — |
+| Monitor Kafka (`monitor_kafka_flow.py`) | primary | — |
+
+Requisitos del clúster:
+
+- Tres instancias `RUNNING` (primary + 2 core).
+- Misma VPC que los workers; security group con `9092`/`9093` abiertos entre nodos del primary y desde los workers.
+- IAM con `elasticmapreduce:ListInstances` para descubrir DNS privados de los core nodes.
+
+### EMR_WORKERS — Flink y Spark
+
+En uno o más clústeres de cómputo **no** se instala Kafka:
+
+| Componente | Ubicación | Notas |
+|---|---|---|
+| Flink (5 jobs streaming) | primer endpoint de `EMR_WORKERS` | consume `raw_youtube_chat` vía red privada al primary |
+| Spark batch | todos los workers (round-robin) | rangos disjuntos de `SPARK_BATCH_SIZE` eventos |
+| YARN | todos los workers | scheduling de aplicaciones Spark |
+
+Requisitos:
+
+- Spark 3.4.1 y Flink 1.17.1.
+- Conectividad privada al bootstrap Kafka del primary (`9092`).
+- Lectura/escritura S3 (Raw, modelos OffendES, Curated).
+
+### Resumen del flujo
+
+```text
+S3 youtube_lake.csv
+  → producer Python (EMR_PRIMARY)
+  → Kafka KRaft 3 nodos (EMR_PRIMARY)
+  → Flink + Spark (EMR_WORKERS)
+  → topics de resultados (Kafka) + Parquet Curated (S3)
+```
+
+Los comandos antiguos que ejecutaban Kafka, Flink y Spark en el mismo nodo ya no aplican.
 
 ## 1. Prerrequisitos
 

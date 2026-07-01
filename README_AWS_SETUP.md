@@ -1,5 +1,20 @@
 # AWS Setup - Kafka, Flink y Spark en EMR
 
+## Setupeo de clústeres
+
+La plataforma separa **eventos** (primary) de **cómputo** (workers):
+
+| Clúster | Rol | Servicios |
+|---|---|---|
+| `EMR_PRIMARY` | Bus de eventos e ingesta | Kafka KRaft (3 nodos), producer Python, monitor |
+| `EMR_WORKERS` | Procesamiento | Flink (5 jobs), Spark batch, YARN |
+
+Kafka **vive exclusivamente en `EMR_PRIMARY`**. Flink y Spark se conectan al bootstrap `9092` del primary por red privada; no levantes brokers en los workers.
+
+Flujo: `S3 Raw → producer (primary) → Kafka (primary) → Flink/Spark (workers)`.
+
+Consulta [architecture.md](architecture.md) para diagramas y [docs/comandos_levantar_desde_cero.md](docs/comandos_levantar_desde_cero.md) para el runbook completo.
+
 ## Arquitectura
 
 - `EMR_PRIMARY`: tres instancias dedicadas al quorum Kafka KRaft.

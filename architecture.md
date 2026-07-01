@@ -222,3 +222,18 @@ El primer worker aloja Flink; todos participan en Spark. Los clústeres deben co
 - **Flink normalizados** se obtiene del offset confirmado de `flink-job1-normalize`, también incluido en el delta de `3 s`.
 - El estado principal muestra **conectado** con foco verde cuando existe una sesión AWS activa. `degraded` se conserva como diagnóstico interno para acciones sobre quorum, Flink o YARN, sin presentar la plataforma como desconectada.
 - Una pérdida temporal de Kafka conserva el último estado, muestra el detalle del error y continúa verificando; nunca reinicia automáticamente la plataforma.
+
+## 12. Comandos operativos
+
+Setupeo previo: levantar `EMR_PRIMARY` (Kafka en 3 nodos) y `EMR_WORKERS` (Flink + Spark) en la misma VPC. Configurar `.env` con ambos endpoints y `final.pem` en la máquina local.
+
+| Acción | Comando |
+|---|---|
+| Dashboard local | `cd emr_kafka_setup/dashboard && ./start_dashboard.sh` |
+| Bootstrap completo | `./scripts/bootstrap_emr_streaming.sh` |
+| Sesión limpia | `./scripts/bootstrap_emr_streaming.sh --reset-topics` |
+| Validar salud | `./scripts/pipeline_health_from_aws.sh` |
+| Detener servicios | `./scripts/stop_emr_streaming.sh` |
+| Reinicio conservando offsets | `./scripts/restart_services_after_session.sh` |
+
+Detalle paso a paso en [docs/comandos_levantar_desde_cero.md](docs/comandos_levantar_desde_cero.md).
