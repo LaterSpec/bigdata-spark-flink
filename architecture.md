@@ -1,5 +1,7 @@
 # Arquitectura distribuida vigente
 
+**Repositorio:** [github.com/LaterSpec/bigdata-spark-flink](https://github.com/LaterSpec/bigdata-spark-flink)
+
 ## 1. Vista canónica
 
 `EMR_PRIMARY` es la puerta de entrada y el bus central de la plataforma. El script Python `produce_youtube_chat_from_s3.py` lee `youtube_lake.csv` desde el Data Lake, regula la velocidad para simular streaming y publica en Kafka. Desde el topic `raw_youtube_chat`, Kafka habilita dos consumos independientes: Flink streaming y Spark batch. Spark no lee el CSV directamente en este flujo operativo; siempre entra por Kafka.

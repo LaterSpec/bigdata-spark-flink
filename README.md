@@ -2,6 +2,8 @@
 
 Plataforma distribuida para analizar comentarios de YouTube Live Chat electoral peruano mediante Kafka, Flink, Spark, reglas lingüísticas locales y modelos OffendES.
 
+**Repositorio:** [github.com/LaterSpec/bigdata-spark-flink](https://github.com/LaterSpec/bigdata-spark-flink)
+
 ## Arquitectura vigente
 
 ```mermaid

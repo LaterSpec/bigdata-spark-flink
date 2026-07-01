@@ -1,5 +1,7 @@
 # Informe final LaTeX
 
+**Repositorio del proyecto:** [github.com/LaterSpec/bigdata-spark-flink](https://github.com/LaterSpec/bigdata-spark-flink)
+
 Artefactos:
 
 - `informe_final.tex`: código fuente del informe.
